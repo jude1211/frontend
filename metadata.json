@@ -1,0 +1,6 @@
+{
+  "name": "BookNView",
+  "description": "A responsive and modern movie ticket booking frontend interface, optimized for desktop and mobile. It features movie listings, seat selection, snack ordering, and an admin dashboard.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
