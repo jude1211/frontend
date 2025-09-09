@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,22 @@ const Header: React.FC = () => {
   const [detectionError, setDetectionError] = useState('');
   const [detectionSuccess, setDetectionSuccess] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [theatreOwnerData, setTheatreOwnerData] = useState<any>(null);
+
+  // Check for theatre owner authentication
+  useEffect(() => {
+    const storedTheatreOwnerData = localStorage.getItem('theatreOwnerData');
+    if (storedTheatreOwnerData) {
+      try {
+        setTheatreOwnerData(JSON.parse(storedTheatreOwnerData));
+      } catch (error) {
+        console.error('Error parsing theatre owner data:', error);
+      }
+    }
+  }, []);
+
+  // Check if theatre owner is logged in
+  const isTheatreOwnerLoggedIn = !!localStorage.getItem('theatreOwnerToken');
 
   const handleCitySelect = (selectedCity: string) => {
     setCity(selectedCity);
@@ -55,6 +71,14 @@ const Header: React.FC = () => {
     setRetryCount(0);
   };
 
+  const handleTheatreOwnerLogout = () => {
+    localStorage.removeItem('theatreOwnerToken');
+    localStorage.removeItem('theatreOwnerData');
+    setTheatreOwnerData(null);
+    // Redirect to home page
+    window.location.href = '/';
+  };
+
   return (
     <>
       <header className="bg-brand-gray shadow-lg sticky top-0 z-50">
@@ -85,10 +109,37 @@ const Header: React.FC = () => {
                 <span>{city}</span>
                 <i className="fa fa-chevron-down text-xs"></i>
               </button>
-              {isAuthenticated && userData ? (
+              {isTheatreOwnerLoggedIn && theatreOwnerData ? (
                 <div className="relative group">
                   <button className="flex items-center space-x-2 text-white px-3 py-2 rounded-md">
-                    {userData.profilePicture ? (
+                    <i className="fa fa-building text-xl text-brand-red"></i>
+                    <span className="font-semibold">
+                      {theatreOwnerData.ownerName}
+                    </span>
+                  </button>
+                  <div className="absolute right-0 mt-2 w-48 bg-brand-dark rounded-md shadow-lg py-1 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200 z-10 origin-top-right">
+                    <Link
+                      to="/theatre-owner/dashboard"
+                      className="block w-full text-left px-4 py-2 text-sm text-brand-light-gray hover:bg-brand-gray"
+                    >
+                      <i className="fa fa-tachometer-alt mr-2"></i>
+                      Dashboard
+                    </Link>
+                    <button
+                      onClick={handleTheatreOwnerLogout}
+                      className="block w-full text-left px-4 py-2 text-sm text-brand-light-gray hover:bg-brand-gray"
+                    >
+                      <i className="fa fa-sign-out-alt mr-2"></i>
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              ) : isAuthenticated && userData ? (
+                <div className="relative group">
+                  <button className="flex items-center space-x-2 text-white px-3 py-2 rounded-md">
+                    {userData.isAdmin || userData.role === 'admin' ? (
+                      <i className="fa fa-shield-alt text-xl text-yellow-400"></i>
+                    ) : userData.profilePicture ? (
                       <img
                         src={userData.profilePicture}
                         alt="Profile"
@@ -98,24 +149,48 @@ const Header: React.FC = () => {
                       <i className="fa fa-user-circle text-xl"></i>
                     )}
                     <span className="font-semibold">
-                      Hi, {userData.firstName || userData.displayName.split(' ')[0]}
+                      {userData.isAdmin || userData.role === 'admin' 
+                        ? (userData.firstName || userData.displayName || 'Administrator')
+                        : `Hi, ${userData.firstName || userData.displayName.split(' ')[0]}`
+                      }
                     </span>
                   </button>
                   <div className="absolute right-0 mt-2 w-48 bg-brand-dark rounded-md shadow-lg py-1 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200 z-10 origin-top-right">
-                    <Link
-                      to="/profile"
-                      className="block w-full text-left px-4 py-2 text-sm text-brand-light-gray hover:bg-brand-gray"
-                    >
-                      <i className="fa fa-user mr-2"></i>
-                      My Profile
-                    </Link>
-                    <button
-                      onClick={logout}
-                      className="block w-full text-left px-4 py-2 text-sm text-brand-light-gray hover:bg-brand-gray"
-                    >
-                      <i className="fa fa-sign-out-alt mr-2"></i>
-                      Logout
-                    </button>
+                    {userData.isAdmin || userData.role === 'admin' ? (
+                      <>
+                        <Link
+                          to="/admin-dashboard"
+                          className="block w-full text-left px-4 py-2 text-sm text-brand-light-gray hover:bg-brand-gray"
+                        >
+                          <i className="fa fa-tachometer-alt mr-2"></i>
+                          Admin Dashboard
+                        </Link>
+                        <button
+                          onClick={logout}
+                          className="block w-full text-left px-4 py-2 text-sm text-brand-light-gray hover:bg-brand-gray"
+                        >
+                          <i className="fa fa-sign-out-alt mr-2"></i>
+                          Logout
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          to="/profile"
+                          className="block w-full text-left px-4 py-2 text-sm text-brand-light-gray hover:bg-brand-gray"
+                        >
+                          <i className="fa fa-user mr-2"></i>
+                          My Profile
+                        </Link>
+                        <button
+                          onClick={logout}
+                          className="block w-full text-left px-4 py-2 text-sm text-brand-light-gray hover:bg-brand-gray"
+                        >
+                          <i className="fa fa-sign-out-alt mr-2"></i>
+                          Logout
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : (

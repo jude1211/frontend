@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import BookNViewLoader from '../components/BookNViewLoader';
 import { apiService } from '../services/api';
 
+interface SeatClassConfig {
+  label: string;
+  price: string;
+}
+
 interface ScreenDetails {
   screenNumber: number;
   seatingCapacity: string;
@@ -10,6 +15,10 @@ interface ScreenDetails {
   baseTicketPrice: string;
   premiumPrice: string;
   vipPrice: string;
+  rows?: string;
+  columns?: string;
+  aisleColumns?: string; // comma-separated list of aisle/gap column indexes
+  seatClasses?: SeatClassConfig[]; // e.g., Gold/Silver/Balcony with price
   seatingLayoutFiles?: File[];
   ticketPricingFiles?: File[];
 }
@@ -162,6 +171,14 @@ const TheatreOwnerSignupPage: React.FC = () => {
           baseTicketPrice: '',
           premiumPrice: '',
           vipPrice: '',
+          rows: '',
+          columns: '',
+          aisleColumns: '',
+          seatClasses: [
+            { label: 'Gold', price: '' },
+            { label: 'Silver', price: '' },
+            { label: 'Balcony', price: '' }
+          ],
           seatingLayoutFiles: [],
           ticketPricingFiles: []
         });
@@ -208,9 +225,30 @@ const TheatreOwnerSignupPage: React.FC = () => {
       };
       
       // Update total seating capacity
-      const totalCapacity = newScreens.reduce((total, screen) => 
-        total + (parseInt(screen.seatingCapacity) || 0), 0
-      );
+      const totalCapacity = newScreens.reduce((total, screen) => {
+        // If rows/columns provided, prefer rows*columns minus aisles as rough capacity; fallback to manual seatingCapacity
+        const rows = parseInt(screen.rows || '0');
+        const cols = parseInt(screen.columns || '0');
+        let base = 0;
+        if (rows > 0 && cols > 0) {
+          base = rows * cols;
+          if (screen.aisleColumns) {
+            try {
+              const aisleCount = screen.aisleColumns
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean).length;
+              // Roughly subtract aisles across all rows
+              base = Math.max(0, base - (aisleCount * rows));
+            } catch (_) {
+              // ignore parsing errors
+            }
+          }
+        } else {
+          base = parseInt(screen.seatingCapacity) || 0;
+        }
+        return total + base;
+      }, 0);
       
       return {
         ...prev,
@@ -768,6 +806,39 @@ const TheatreOwnerSignupPage: React.FC = () => {
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
+                              <label className="block text-white text-sm mb-2">Number of Rows *</label>
+                              <input
+                                type="number"
+                                value={screen.rows || ''}
+                                onChange={(e) => handleScreenChange(index, 'rows', e.target.value)}
+                                placeholder="e.g., 12"
+                                min="1"
+                                className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-white text-sm mb-2">Columns per Row *</label>
+                              <input
+                                type="number"
+                                value={screen.columns || ''}
+                                onChange={(e) => handleScreenChange(index, 'columns', e.target.value)}
+                                placeholder="e.g., 18"
+                                min="1"
+                                className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-white text-sm mb-2">Aisle/Gaps Columns (comma-separated)</label>
+                              <input
+                                type="text"
+                                value={screen.aisleColumns || ''}
+                                onChange={(e) => handleScreenChange(index, 'aisleColumns', e.target.value)}
+                                placeholder="e.g., 5, 10"
+                                className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red"
+                              />
+                              <p className="text-brand-light-gray text-xs mt-1">Specify column numbers to leave empty as aisles</p>
+                            </div>
+                            <div>
                               <label className="block text-white text-sm mb-2">Seating Capacity *</label>
                               <input
                                 type="number"
@@ -926,6 +997,84 @@ const TheatreOwnerSignupPage: React.FC = () => {
                             </div>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                            {/* Seat Classes Configuration */}
+                            <div className="md:col-span-2">
+                              <label className="block text-white text-sm mb-2">Seat Classes & Pricing</label>
+                              <div className="space-y-3">
+                                {(screen.seatClasses || []).map((cls, clsIdx) => (
+                                  <div key={clsIdx} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <input
+                                      type="text"
+                                      value={cls.label}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
+                                        setFormData(prev => {
+                                          const newScreens = [...prev.screens];
+                                          const sc = [...(newScreens[index].seatClasses || [])];
+                                          sc[clsIdx] = { ...sc[clsIdx], label: value };
+                                          newScreens[index] = { ...newScreens[index], seatClasses: sc };
+                                          return { ...prev, screens: newScreens };
+                                        });
+                                      }}
+                                      placeholder="Class label e.g., Gold"
+                                      className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red"
+                                    />
+                                    <input
+                                      type="number"
+                                      value={cls.price}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
+                                        setFormData(prev => {
+                                          const newScreens = [...prev.screens];
+                                          const sc = [...(newScreens[index].seatClasses || [])];
+                                          sc[clsIdx] = { ...sc[clsIdx], price: value };
+                                          newScreens[index] = { ...newScreens[index], seatClasses: sc };
+                                          return { ...prev, screens: newScreens };
+                                        });
+                                      }}
+                                      placeholder="Price e.g., 200"
+                                      min="0"
+                                      className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red"
+                                    />
+                                  </div>
+                                ))}
+                                <div className="flex gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFormData(prev => {
+                                        const newScreens = [...prev.screens];
+                                        const sc = [...(newScreens[index].seatClasses || [])];
+                                        sc.push({ label: '', price: '' });
+                                        newScreens[index] = { ...newScreens[index], seatClasses: sc };
+                                        return { ...prev, screens: newScreens };
+                                      });
+                                    }}
+                                    className="px-3 py-2 bg-brand-red text-white rounded-lg text-sm hover:bg-red-700"
+                                  >
+                                    Add Class
+                                  </button>
+                                  {(screen.seatClasses || []).length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setFormData(prev => {
+                                          const newScreens = [...prev.screens];
+                                          const sc = [...(newScreens[index].seatClasses || [])];
+                                          sc.pop();
+                                          newScreens[index] = { ...newScreens[index], seatClasses: sc };
+                                          return { ...prev, screens: newScreens };
+                                        });
+                                      }}
+                                      className="px-3 py-2 bg-brand-dark text-white border border-brand-dark/40 rounded-lg text-sm hover:bg-brand-dark/70"
+                                    >
+                                      Remove Last
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="text-brand-light-gray text-xs">Define custom classes like Gold, Silver, Balcony with pricing.</p>
+                              </div>
+                            </div>
                             <div>
                               <FileUpload
                                 label={`Seating Layout/Diagram (Screen ${screen.screenNumber})`}

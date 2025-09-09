@@ -1,7 +1,7 @@
 // API service for backend integration
 // Prefer Vite env; fallback to common local ports (prefer 5000 default, then 5001)
 const VITE_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
-const API_BASE_CANDIDATES = VITE_BASE ? [VITE_BASE] : ['http://localhost:5000/api/v1', 'http://localhost:5001/api/v1'];
+const API_BASE_CANDIDATES = VITE_BASE ? [VITE_BASE] : ['http://localhost:5000/api/v1'];
 
 // Add error logging for debugging
 const originalFetch = window.fetch;
@@ -434,10 +434,20 @@ class ApiService {
 
   // Theatre Owner methods
   async theatreOwnerLogin(username: string, password: string): Promise<ApiResponse<any>> {
-    return this.makeRequest<any>('/theatre-owner/login', {
+    console.log('🎭 Theatre Owner Login attempt:', { username, endpoint: '/theatre-owner/login' });
+    
+    const response = await this.makeRequest<any>('/theatre-owner/login', {
       method: 'POST',
       body: JSON.stringify({ username, password })
     });
+
+    if (response.success && response.data?.token) {
+      localStorage.setItem('theatreOwnerToken', response.data.token);
+      localStorage.setItem('theatreOwnerData', JSON.stringify(response.data.theatreOwner));
+      console.log('✅ Theatre Owner login successful');
+    }
+
+    return response;
   }
 
   async getTheatreOwnerProfile(): Promise<ApiResponse<any>> {
@@ -457,6 +467,69 @@ class ApiService {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(profileData)
+    });
+  }
+
+  // Offline Booking Methods
+  async createOfflineBooking(bookingData: any): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>('/offline-bookings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(bookingData)
+    });
+  }
+
+  async getOfflineBookings(params?: any): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    const queryString = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.makeRequest<any>(`/offline-bookings${queryString}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  async getOfflineBooking(bookingId: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/offline-bookings/${bookingId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  async updateOfflineBookingStatus(bookingId: string, status: string, reason?: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/offline-bookings/${bookingId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status, cancellationReason: reason })
+    });
+  }
+
+  async getOfflineBookingStats(params?: any): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    const queryString = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.makeRequest<any>(`/offline-bookings/stats/summary${queryString}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  async searchOfflineBookings(query: string, page = 1, limit = 10): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/offline-bookings/search/query?q=${encodeURIComponent(query)}&page=${page}&limit=${limit}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
     });
   }
 }

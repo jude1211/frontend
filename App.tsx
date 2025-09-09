@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -16,14 +15,14 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import TheatreOwnerSignupPage from './pages/TheatreOwnerSignupPage';
 import ProtectedRoute from './components/ProtectedRoute';
-
-// Theatre Owner Components
-import TheatreOwnerLoginPage from './pages/TheatreOwnerLoginPage';
+import TheatreOwnerProtectedRoute from './components/TheatreOwnerProtectedRoute';
+import TheatreOwnerLanding from './pages/TheatreOwnerLanding';
 import TheatreOwnerDashboard from './pages/TheatreOwnerDashboard';
 import MovieManagement from './theatre-owner/MovieManagement';
 import ScreenManagement from './theatre-owner/ScreenManagement';
 import SnacksManagement from './theatre-owner/SnacksManagement';
-import TheatreOwnerLanding from './pages/TheatreOwnerLanding';
+import TheatreOwnerReports from './pages/TheatreOwnerReports';
+import TheatreOwnerProfile from './pages/TheatreOwnerProfile';
 
 const App: React.FC = () => {
   return (
@@ -52,31 +51,40 @@ const App: React.FC = () => {
                   </ProtectedRoute>
                 } />
                 <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
-                
+
                 {/* Theatre Owner Routes */}
                 <Route path="/theatre-owner-signup" element={<TheatreOwnerSignupPage />} />
                 <Route path="/theatre-owner-landing" element={<TheatreOwnerLanding />} />
-                <Route path="/theatre-owner/login" element={<TheatreOwnerLoginPage />} />
                 <Route path="/theatre-owner/dashboard" element={<TheatreOwnerDashboard />} />
                 <Route path="/theatre-owner" element={
-                  <ProtectedRoute>
+                  <TheatreOwnerProtectedRoute>
                     <TheatreOwnerDashboard />
-                  </ProtectedRoute>
+                  </TheatreOwnerProtectedRoute>
                 } />
                 <Route path="/theatre-owner/movies" element={
-                  <ProtectedRoute>
+                  <TheatreOwnerProtectedRoute>
                     <MovieManagement />
-                  </ProtectedRoute>
+                  </TheatreOwnerProtectedRoute>
                 } />
                 <Route path="/theatre-owner/screens" element={
-                  <ProtectedRoute>
+                  <TheatreOwnerProtectedRoute>
                     <ScreenManagement />
-                  </ProtectedRoute>
+                  </TheatreOwnerProtectedRoute>
                 } />
                 <Route path="/theatre-owner/snacks" element={
-                  <ProtectedRoute>
+                  <TheatreOwnerProtectedRoute>
                     <SnacksManagement />
-                  </ProtectedRoute>
+                  </TheatreOwnerProtectedRoute>
+                } />
+                <Route path="/theatre-owner/reports" element={
+                  <TheatreOwnerProtectedRoute>
+                    <TheatreOwnerReports />
+                  </TheatreOwnerProtectedRoute>
+                } />
+                <Route path="/theatre-owner/profile" element={
+                  <TheatreOwnerProtectedRoute>
+                    <TheatreOwnerProfile />
+                  </TheatreOwnerProtectedRoute>
                 } />
               </Routes>
             </main>

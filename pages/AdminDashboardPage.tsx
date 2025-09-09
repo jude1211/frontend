@@ -442,16 +442,6 @@ const AdminDashboardPage: React.FC = () => {
                 <p className="text-gray-400">Manage theatre applications and users</p>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-300">Welcome, {userData?.displayName || 'Administrator'}</span>
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2"
-              >
-                <i className="fas fa-sign-out-alt"></i>
-                <span>Logout</span>
-              </button>
-            </div>
           </div>
         </div>
 

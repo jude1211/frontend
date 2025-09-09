@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import OfflineBookingManagement from '../components/OfflineBookingManagement';
 
 interface TheatreOwner {
   _id: string;
@@ -21,6 +22,8 @@ const TheatreOwnerDashboard: React.FC = () => {
   const [theatreOwner, setTheatreOwner] = useState<TheatreOwner | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'shows' | 'screens' | 'reports' | 'profile' | 'offline-bookings'>('dashboard');
+  const [showOfflineBooking, setShowOfflineBooking] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -99,22 +102,30 @@ const TheatreOwnerDashboard: React.FC = () => {
               </div>
               <h1 className="text-xl font-semibold text-white">Theatre Owner Portal</h1>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-white">Welcome, {theatreOwner?.ownerName}</span>
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2"
-              >
-                <i className="fas fa-sign-out-alt"></i>
-                <span>Logout</span>
-              </button>
-            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Navigation Breadcrumb */}
+        {activeSection !== 'dashboard' && (
+          <div className="mb-6">
+            <nav className="flex items-center space-x-2 text-sm">
+              <button
+                onClick={() => setActiveSection('dashboard')}
+                className="text-gray-400 hover:text-white transition-colors duration-200"
+              >
+                <i className="fas fa-home mr-1"></i>
+                Dashboard
+              </button>
+              <i className="fas fa-chevron-right text-gray-600"></i>
+              <span className="text-white font-medium capitalize">
+                {activeSection.replace('-', ' ')}
+              </span>
+            </nav>
+          </div>
+        )}
         {/* Welcome Section */}
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-8">
           <div className="flex items-center justify-between">
@@ -194,21 +205,47 @@ const TheatreOwnerDashboard: React.FC = () => {
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
             <h2 className="text-xl font-bold text-white mb-6">Quick Actions</h2>
             <div className="space-y-4">
-              <button className="w-full bg-red-600 hover:bg-red-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3">
+              <button 
+                onClick={() => navigate('/theatre-owner/movies')}
+                className="w-full bg-red-600 hover:bg-red-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
+              >
                 <i className="fas fa-plus text-xl"></i>
                 <span>Add New Show</span>
               </button>
-              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3">
+              <button 
+                onClick={() => navigate('/theatre-owner/screens')}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
+              >
                 <i className="fas fa-cog text-xl"></i>
                 <span>Manage Screens</span>
               </button>
-              <button className="w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3">
+              <button 
+                onClick={() => navigate('/theatre-owner/snacks')}
+                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
+              >
+                <i className="fas fa-hamburger text-xl"></i>
+                <span>Manage Snacks</span>
+              </button>
+              <button 
+                onClick={() => navigate('/theatre-owner/reports')}
+                className="w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
+              >
                 <i className="fas fa-chart-bar text-xl"></i>
                 <span>View Reports</span>
               </button>
-              <button className="w-full bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3">
+              <button 
+                onClick={() => navigate('/theatre-owner/profile')}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
+              >
                 <i className="fas fa-user-edit text-xl"></i>
                 <span>Edit Profile</span>
+              </button>
+              <button 
+                onClick={() => setShowOfflineBooking(true)}
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
+              >
+                <i className="fas fa-ticket-alt text-xl"></i>
+                <span>Offline Bookings</span>
               </button>
             </div>
           </div>
@@ -247,24 +284,102 @@ const TheatreOwnerDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Coming Soon */}
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-          <h2 className="text-xl font-bold text-white mb-4">🚀 Coming Soon</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-700 rounded-lg p-4">
-              <h3 className="text-white font-semibold mb-2">Show Management</h3>
-              <p className="text-gray-400 text-sm">Add and manage movie shows, timings, and pricing</p>
-            </div>
-            <div className="bg-gray-700 rounded-lg p-4">
-              <h3 className="text-white font-semibold mb-2">Booking Analytics</h3>
-              <p className="text-gray-400 text-sm">Track bookings, revenue, and customer insights</p>
-            </div>
-            <div className="bg-gray-700 rounded-lg p-4">
-              <h3 className="text-white font-semibold mb-2">Seat Configuration</h3>
-              <p className="text-gray-400 text-sm">Configure seating layouts and pricing tiers</p>
+        {/* Dynamic Content Based on Active Section */}
+        {activeSection === 'dashboard' && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <h2 className="text-xl font-bold text-white mb-4">🚀 Coming Soon</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h3 className="text-white font-semibold mb-2">Show Management</h3>
+                <p className="text-gray-400 text-sm">Add and manage movie shows, timings, and pricing</p>
+              </div>
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h3 className="text-white font-semibold mb-2">Booking Analytics</h3>
+                <p className="text-gray-400 text-sm">Track bookings, revenue, and customer insights</p>
+              </div>
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h3 className="text-white font-semibold mb-2">Seat Configuration</h3>
+                <p className="text-gray-400 text-sm">Configure seating layouts and pricing tiers</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {activeSection === 'shows' && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <h2 className="text-xl font-bold text-white mb-6">Show Management</h2>
+            <div className="text-center py-12">
+              <i className="fas fa-film text-6xl text-gray-600 mb-4"></i>
+              <h3 className="text-xl font-semibold text-white mb-2">Show Management Coming Soon</h3>
+              <p className="text-gray-400 mb-6">Add and manage movie shows, timings, and pricing for your theatre</p>
+              <button 
+                onClick={() => setActiveSection('dashboard')}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeSection === 'screens' && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <h2 className="text-xl font-bold text-white mb-6">Screen Management</h2>
+            <div className="text-center py-12">
+              <i className="fas fa-desktop text-6xl text-gray-600 mb-4"></i>
+              <h3 className="text-xl font-semibold text-white mb-2">Screen Management Coming Soon</h3>
+              <p className="text-gray-400 mb-6">Configure and manage your theatre screens and seating arrangements</p>
+              <button 
+                onClick={() => setActiveSection('dashboard')}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeSection === 'reports' && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <h2 className="text-xl font-bold text-white mb-6">Reports & Analytics</h2>
+            <div className="text-center py-12">
+              <i className="fas fa-chart-bar text-6xl text-gray-600 mb-4"></i>
+              <h3 className="text-xl font-semibold text-white mb-2">Reports Coming Soon</h3>
+              <p className="text-gray-400 mb-6">Track bookings, revenue, and customer insights with detailed analytics</p>
+              <button 
+                onClick={() => setActiveSection('dashboard')}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeSection === 'profile' && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <h2 className="text-xl font-bold text-white mb-6">Profile Management</h2>
+            <div className="text-center py-12">
+              <i className="fas fa-user-edit text-6xl text-gray-600 mb-4"></i>
+              <h3 className="text-xl font-semibold text-white mb-2">Profile Management Coming Soon</h3>
+              <p className="text-gray-400 mb-6">Update your theatre information and personal details</p>
+              <button 
+                onClick={() => setActiveSection('dashboard')}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Offline Booking Modal */}
+        {showOfflineBooking && (
+          <OfflineBookingManagement
+            theatreOwner={theatreOwner}
+            onClose={() => setShowOfflineBooking(false)}
+          />
+        )}
       </main>
     </div>
   );

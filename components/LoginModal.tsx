@@ -178,7 +178,38 @@ const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
           setNotification(`Error sending verification email: ${error.message || 'Unknown error'}`);
         }
       } else {
-        console.log('🔐 Submitting login form...');
+        // Check if this is a theatre owner email
+        if (formData.email.includes('@booknview.com')) {
+          console.log('🎭 Theatre owner email detected, attempting theatre owner login...');
+          setAuthMethod('manual');
+          setNotification('🎭 Theatre owner login detected. Authenticating...');
+          
+          try {
+            const response = await apiService.theatreOwnerLogin(formData.email, formData.password);
+            
+            if (response.success) {
+              // Store theatre owner token and data
+              localStorage.setItem('theatreOwnerToken', response.data.token);
+              localStorage.setItem('theatreOwnerData', JSON.stringify(response.data.theatreOwner));
+              
+              console.log('✅ Theatre owner login successful, redirecting to dashboard...');
+              setNotification('✅ Theatre owner login successful! Redirecting to dashboard...');
+              onClose();
+              resetForm();
+              navigate('/theatre-owner/dashboard');
+              return;
+            } else {
+              setNotification(response.error || 'Theatre owner login failed');
+              return;
+            }
+          } catch (error: any) {
+            console.error('❌ Theatre owner login error:', error);
+            setNotification(error.message || 'Theatre owner login failed');
+            return;
+          }
+        }
+        
+        console.log('🔐 Submitting regular user login form...');
         setAuthMethod('manual');
         success = await login(formData.email, formData.password);
       }
