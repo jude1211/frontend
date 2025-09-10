@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import OfflineBookingManagement from '../components/OfflineBookingManagement';
+import { usePreventBackNavigation } from '../hooks/usePreventBackNavigation';
 
 interface TheatreOwner {
   _id: string;
@@ -19,6 +20,13 @@ interface TheatreOwner {
 
 const TheatreOwnerDashboard: React.FC = () => {
   const navigate = useNavigate();
+  
+  // Prevent back navigation to login pages
+  usePreventBackNavigation({ 
+    redirectPath: '/theatre-owner/dashboard',
+    shouldPrevent: true 
+  });
+  
   const [theatreOwner, setTheatreOwner] = useState<TheatreOwner | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

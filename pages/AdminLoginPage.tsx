@@ -1,12 +1,25 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const AdminLoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, currentUser } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (currentUser?.isAdmin || currentUser?.role === 'admin') {
+        navigate('/admin/dashboard', { replace: true });
+      } else {
+        navigate('/profile', { replace: true });
+      }
+    }
+  }, [isAuthenticated, currentUser, navigate]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();

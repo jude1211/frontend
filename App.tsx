@@ -16,6 +16,7 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 import TheatreOwnerSignupPage from './pages/TheatreOwnerSignupPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import TheatreOwnerProtectedRoute from './components/TheatreOwnerProtectedRoute';
+import AuthGuard from './components/AuthGuard';
 import TheatreOwnerLanding from './pages/TheatreOwnerLanding';
 import TheatreOwnerDashboard from './pages/TheatreOwnerDashboard';
 import MovieManagement from './theatre-owner/MovieManagement';
@@ -44,7 +45,11 @@ const App: React.FC = () => {
                   </ProtectedRoute>
                 } />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
-                <Route path="/admin" element={<AdminLoginPage />} />
+                <Route path="/admin" element={
+                  <AuthGuard adminOnly={true}>
+                    <AdminLoginPage />
+                  </AuthGuard>
+                } />
                 <Route path="/admin/dashboard" element={
                   <ProtectedRoute adminOnly={true}>
                     <AdminDashboardPage />
@@ -54,7 +59,11 @@ const App: React.FC = () => {
 
                 {/* Theatre Owner Routes */}
                 <Route path="/theatre-owner-signup" element={<TheatreOwnerSignupPage />} />
-                <Route path="/theatre-owner-landing" element={<TheatreOwnerLanding />} />
+                <Route path="/theatre-owner-landing" element={
+                  <AuthGuard theatreOwnerOnly={true}>
+                    <TheatreOwnerLanding />
+                  </AuthGuard>
+                } />
                 <Route path="/theatre-owner/dashboard" element={<TheatreOwnerDashboard />} />
                 <Route path="/theatre-owner" element={
                   <TheatreOwnerProtectedRoute>

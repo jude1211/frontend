@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
+import { usePreventBackNavigation } from '../hooks/usePreventBackNavigation';
 
 interface TheatreApplication {
   _id: string;
@@ -61,6 +62,12 @@ interface AdminStats {
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { userData, logout } = useAuth();
+  
+  // Prevent back navigation to login pages
+  usePreventBackNavigation({ 
+    redirectPath: '/admin/dashboard',
+    shouldPrevent: true 
+  });
   const [applications, setApplications] = useState<TheatreApplication[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<AdminStats>({
