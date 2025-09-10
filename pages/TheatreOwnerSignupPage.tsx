@@ -1,7 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import BookNViewLoader from '../components/BookNViewLoader';
+// import BookNViewLoader from '../components/BookNViewLoader';
 import { apiService } from '../services/api';
+
+// Cloudinary config (read from Vite env; fallback to known safe defaults if provided)
+const CLOUD_NAME = (import.meta as any)?.env?.VITE_CLOUDINARY_CLOUD_NAME || 'dslj1txvj';
+const UNSIGNED_PRESET = (import.meta as any)?.env?.VITE_CLOUDINARY_UNSIGNED_PRESET || 'booknview';
+
+// Minimal client-side uploader for unsigned Cloudinary uploads
+async function uploadToCloudinary(file: File, folder: string): Promise<string> {
+  const endpoint = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`;
+  const data = new FormData();
+  data.append('file', file);
+  data.append('upload_preset', UNSIGNED_PRESET);
+  if (folder) data.append('folder', folder);
+
+  const res = await fetch(endpoint, { method: 'POST', body: data });
+  const json = await res.json();
+  if (!res.ok) {
+    const message = json?.error?.message || json?.message || 'Cloudinary upload failed';
+    throw new Error(message);
+  }
+  return json.secure_url as string;
+}
 
 interface SeatClassConfig {
   label: string;
@@ -43,8 +64,19 @@ interface TheatreOwnerFormData {
   termsAccepted: boolean;
 }
 
+// Error map keyed by form fields with human-readable messages
+type FormErrors = { [K in keyof TheatreOwnerFormData]?: string } & { screens?: string };
+
 // Add a helper component for attractive file upload with clear selected-state
-const FileUpload = ({ label, name, error, onChange, accept, files = [], onBlur }) => (
+const FileUpload: React.FC<{
+  label: string;
+  name: string;
+  error?: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  accept?: string;
+  files?: File[];
+  onBlur?: React.FocusEventHandler<HTMLInputElement>;
+}> = ({ label, name, error, onChange, accept, files = [], onBlur }) => (
   <div className="mb-4">
     <label className="block text-white font-semibold mb-2">{label}</label>
     <div
@@ -106,8 +138,9 @@ const TheatreOwnerSignupPage: React.FC = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [errors, setErrors] = useState<Partial<TheatreOwnerFormData>>({});
+  const [errors, setErrors] = useState<FormErrors>({});
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [submissionDetails, setSubmissionDetails] = useState<{ field?: string; msg?: string }[] | null>(null);
   const [emailChecking, setEmailChecking] = useState(false);
   const [emailCheckTimeout, setEmailCheckTimeout] = useState<NodeJS.Timeout | null>(null);
 
@@ -261,18 +294,13 @@ const TheatreOwnerSignupPage: React.FC = () => {
   // Update handleFileChange to validate field on change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, files } = e.target;
-    if (files) {
-      const fileArr = Array.from(files);
-      const typeError = validateFileTypes(fileArr, name);
-      setFormData(prev => ({
-        ...prev,
-        [name]: typeError ? [] : fileArr
-      }));
-      setErrors(prev => ({
-        ...prev,
-        [name]: typeError
-      }));
-      if (!typeError) validateField(name, fileArr);
+    if (!files) return;
+    setFormData(prev => ({
+      ...prev,
+      [name]: Array.from(files)
+    }));
+    if (errors[name as keyof TheatreOwnerFormData]) {
+      setErrors(prev => ({ ...prev, [name]: undefined }));
     }
   };
 
@@ -399,7 +427,7 @@ const TheatreOwnerSignupPage: React.FC = () => {
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<TheatreOwnerFormData> = {};
+    const newErrors: FormErrors = {};
 
     if (!formData.name.trim()) newErrors.name = 'Name is required';
     if (!formData.email.trim()) newErrors.email = 'Email is required';
@@ -442,44 +470,110 @@ const TheatreOwnerSignupPage: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const buildMultipartForm = (
+    urlPayload?: {
+      businessLicenseUrls?: string[];
+      nocPermissionUrls?: string[];
+      seatingLayoutUrls?: string[];
+      ticketPricingUrls?: string[];
+    }
+  ): FormData => {
+    const form = new FormData();
+    form.append('name', formData.name);
+    form.append('email', formData.email);
+    form.append('phone', formData.phone);
+    form.append('theatreName', formData.theatreName);
+    form.append('theatreType', formData.theatreType);
+    form.append('location', formData.location);
+    form.append('description', formData.description);
+    form.append('screenCount', formData.screenCount);
+    form.append('seatingCapacity', formData.seatingCapacity);
+    form.append('internetConnectivity', formData.internetConnectivity || 'broadband');
+    form.append('termsAccepted', String(formData.termsAccepted));
+    form.append('screens', JSON.stringify(formData.screens || []));
+
+    if (urlPayload) {
+      if (urlPayload.businessLicenseUrls) {
+        form.append('businessLicenseUrls', JSON.stringify(urlPayload.businessLicenseUrls));
+      }
+      if (urlPayload.nocPermissionUrls) {
+        form.append('nocPermissionUrls', JSON.stringify(urlPayload.nocPermissionUrls));
+      }
+      if (urlPayload.seatingLayoutUrls) {
+        form.append('seatingLayoutUrls', JSON.stringify(urlPayload.seatingLayoutUrls));
+      }
+      if (urlPayload.ticketPricingUrls) {
+        form.append('ticketPricingUrls', JSON.stringify(urlPayload.ticketPricingUrls));
+      }
+    }
+
+    return form;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!validateForm()) return;
-    
-    // Prevent submission if email is being checked
     if (emailChecking) {
       setSubmissionError('Please wait while we verify your email address.');
       return;
     }
-    
+
     setIsSubmitting(true);
     setSubmissionError(null);
+    setSubmissionDetails(null);
 
     try {
-      const payload = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        theatreName: formData.theatreName,
-        theatreType: formData.theatreType,
-        location: formData.location,
-        description: formData.description,
-        screenCount: formData.screenCount,
-        seatingCapacity: formData.seatingCapacity,
-        screens: formData.screens,
-        internetConnectivity: formData.internetConnectivity,
-        // For now, send empty arrays for documents; per-screen uploads only
-        businessLicense: [],
-        nocPermission: [],
-        termsAccepted: formData.termsAccepted
-      };
+      // Fail fast if Cloudinary env missing
+      if (!CLOUD_NAME || !UNSIGNED_PRESET) {
+        throw new Error('Cloudinary config missing. Set VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UNSIGNED_PRESET.');
+      }
 
-      const res = await apiService.createTheatreOwnerApplication(payload);
+      // Upload all selected files to Cloudinary first
+      const folder = 'booknview/theatre-applications';
+      const businessLicenseUrls: string[] = [];
+      const nocPermissionUrls: string[] = [];
+      const seatingLayoutUrls: string[] = [];
+      const ticketPricingUrls: string[] = [];
+
+      for (const f of formData.businessLicense || []) {
+        businessLicenseUrls.push(await uploadToCloudinary(f, folder));
+      }
+      for (const f of formData.nocPermission || []) {
+        nocPermissionUrls.push(await uploadToCloudinary(f, folder));
+      }
+      for (const screen of formData.screens || []) {
+        for (const f of screen.seatingLayoutFiles || []) {
+          seatingLayoutUrls.push(await uploadToCloudinary(f, folder));
+        }
+        for (const f of screen.ticketPricingFiles || []) {
+          ticketPricingUrls.push(await uploadToCloudinary(f, folder));
+        }
+      }
+
+      const multipart = buildMultipartForm({
+        businessLicenseUrls,
+        nocPermissionUrls,
+        seatingLayoutUrls,
+        ticketPricingUrls
+      });
+
+      // Debug: log outgoing multipart fields
+      try {
+        const debugOut: Record<string, any> = {};
+        multipart.forEach((v, k) => {
+          if (typeof v === 'string') {
+            debugOut[k] = v.length > 200 ? v.substring(0, 200) + '…' : v;
+          } else {
+            debugOut[k] = '[Blob/File]';
+          }
+        });
+        console.log('🧪 Submitting owner application fields:', debugOut);
+      } catch {}
+
+      const res = await apiService.createTheatreOwnerApplicationMultipart(multipart);
       if (res.success) {
         setIsSubmitting(false);
         setIsSubmitted(true);
-        // No automatic redirection - user stays on success screen
       } else {
         throw new Error(res.error || res.message || 'Submission failed');
       }
@@ -487,6 +581,14 @@ const TheatreOwnerSignupPage: React.FC = () => {
       console.error('Submission error:', err);
       setIsSubmitting(false);
       setSubmissionError(err?.message || 'Failed to submit application');
+      if (err?.details || err?.data?.details) {
+        const details = err.details || err.data.details;
+        if (Array.isArray(details)) {
+          console.table(details);
+          setSubmissionDetails(details);
+          alert('Validation errors on server. Please review highlighted issues in the banner.');
+        }
+      }
     }
   };
 
@@ -537,10 +639,26 @@ const TheatreOwnerSignupPage: React.FC = () => {
           </div>
           {submissionError && (
             <div className="mt-4 bg-red-600/20 border border-red-600 text-red-300 px-4 py-3 rounded-xl">
-              <div className="flex items-center">
-                <i className="fas fa-exclamation-triangle mr-2"></i>
-                <span className="font-semibold">Failed to submit:</span>
-                <span className="ml-2">{submissionError}</span>
+              <div className="flex items-start justify-between">
+                <div className="flex items-start">
+                  <i className="fas fa-exclamation-triangle mr-2 mt-0.5"></i>
+                  <div>
+                    <div className="font-semibold">Failed to submit</div>
+                    <div className="mt-1 text-sm">{submissionError}</div>
+                    {submissionDetails && submissionDetails.length > 0 && (
+                      <div className="mt-3">
+                        <div className="font-semibold text-red-200 mb-1">Details:</div>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {submissionDetails.map((d, idx) => (
+                            <li key={idx} className="text-sm">
+                              <span className="font-semibold">{d.field}</span>: {d.msg}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}

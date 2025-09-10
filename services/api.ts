@@ -1,7 +1,8 @@
 // API service for backend integration
-// Prefer Vite env; fallback to common local ports (prefer 5000 default, then 5001)
+// Prefer Vite env; fallback to localhost:5000
 const VITE_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
-const API_BASE_CANDIDATES = VITE_BASE ? [VITE_BASE] : ['http://localhost:5000/api/v1'];
+const DEFAULT_BASES = ['http://localhost:5000/api/v1'];
+const API_BASE_CANDIDATES = VITE_BASE ? [VITE_BASE] : DEFAULT_BASES;
 
 // Add error logging for debugging
 const originalFetch = window.fetch;
@@ -78,9 +79,10 @@ class ApiService {
     let lastError: any;
     for (const base of API_BASE_CANDIDATES) {
       try {
-        // Add a short timeout so we can quickly fall back to the next base URL if one is unreachable
+        // Longer timeout for uploads (multipart), shorter for JSON
+        const timeoutMs = isFormData ? 30000 : 8000;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         const response = await fetch(`${base}${endpoint}`, {
           headers: this.getAuthHeaders(isFormData),
           signal: controller.signal,
@@ -326,6 +328,12 @@ class ApiService {
     return this.makeRequest<{ id: string }>('/theatres/owner-applications', {
       method: 'POST',
       body: JSON.stringify(payload)
+    });
+  }
+  async createTheatreOwnerApplicationMultipart(form: FormData): Promise<ApiResponse<{ id: string }>> {
+    return this.makeRequest<{ id: string }>('/theatres/owner-applications', {
+      method: 'POST',
+      body: form
     });
   }
   async getTheatres(params?: {

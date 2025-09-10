@@ -27,6 +27,12 @@ interface TheatreApplication {
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
   updatedAt: string;
+  documents?: {
+    businessLicenseUrls?: string[];
+    nocPermissionUrls?: string[];
+    seatingLayoutUrls?: string[];
+    ticketPricingUrls?: string[];
+  };
 }
 
 interface User {
@@ -1085,6 +1091,85 @@ const AdminDashboardPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Documents Preview */}
+              {selectedApplication.documents && (
+                <div className="bg-gray-700 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                    <i className="fas fa-file-alt mr-2 text-green-400"></i>
+                    Documents
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Business License */}
+                    <div>
+                      <label className="text-gray-400 text-sm">Business License</label>
+                      {selectedApplication.documents.businessLicenseUrls && selectedApplication.documents.businessLicenseUrls.length > 0 ? (
+                        <div className="mt-2 space-y-2">
+                          {selectedApplication.documents.businessLicenseUrls.map((url, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-gray-800 rounded p-2">
+                              <a href={url} target="_blank" rel="noreferrer" className="text-blue-300 hover:underline truncate mr-3">{url}</a>
+                              <img src={url} alt="business-license" className="w-16 h-16 object-cover rounded hidden md:block" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-400">No files</p>
+                      )}
+                    </div>
+
+                    {/* NOC / Permission */}
+                    <div>
+                      <label className="text-gray-400 text-sm">NOC / Permission</label>
+                      {selectedApplication.documents.nocPermissionUrls && selectedApplication.documents.nocPermissionUrls.length > 0 ? (
+                        <div className="mt-2 space-y-2">
+                          {selectedApplication.documents.nocPermissionUrls.map((url, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-gray-800 rounded p-2">
+                              <a href={url} target="_blank" rel="noreferrer" className="text-blue-300 hover:underline truncate mr-3">{url}</a>
+                              <img src={url} alt="noc" className="w-16 h-16 object-cover rounded hidden md:block" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-400">No files</p>
+                      )}
+                    </div>
+
+                    {/* Seating Layouts */}
+                    <div>
+                      <label className="text-gray-400 text-sm">Seating Layouts</label>
+                      {selectedApplication.documents.seatingLayoutUrls && selectedApplication.documents.seatingLayoutUrls.length > 0 ? (
+                        <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {selectedApplication.documents.seatingLayoutUrls.map((url, idx) => (
+                            <a key={idx} href={url} target="_blank" rel="noreferrer" className="group block bg-gray-800 rounded overflow-hidden">
+                              <img src={url} alt="seating-layout" className="w-full h-24 object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              <div className="p-2 text-xs text-blue-300 truncate group-hover:underline">{url}</div>
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-400">No files</p>
+                      )}
+                    </div>
+
+                    {/* Ticket Pricing */}
+                    <div>
+                      <label className="text-gray-400 text-sm">Ticket Pricing</label>
+                      {selectedApplication.documents.ticketPricingUrls && selectedApplication.documents.ticketPricingUrls.length > 0 ? (
+                        <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {selectedApplication.documents.ticketPricingUrls.map((url, idx) => (
+                            <a key={idx} href={url} target="_blank" rel="noreferrer" className="group block bg-gray-800 rounded overflow-hidden">
+                              <img src={url} alt="ticket-pricing" className="w-full h-24 object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              <div className="p-2 text-xs text-blue-300 truncate group-hover:underline">{url}</div>
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-400">No files</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Application Status */}
               <div className="bg-gray-700 rounded-lg p-4">
