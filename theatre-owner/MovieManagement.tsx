@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import BookNViewLoader from '../components/BookNViewLoader';
+import MovieSearchInput, { TMDBMovieDetails } from '../components/MovieSearchInput';
 import Modal from '../components/Modal';
 
 interface Movie {
@@ -58,6 +59,53 @@ const MovieManagement: React.FC = () => {
     releaseDate: ''
   });
   const [errors, setErrors] = useState<Partial<MovieFormData>>({});
+  const [selectedMovie, setSelectedMovie] = useState<TMDBMovieDetails | null>(null);
+
+  // Auto-fill form with TMDB movie data
+  const handleMovieSelect = (movie: TMDBMovieDetails) => {
+    setSelectedMovie(movie);
+    
+    // Extract genres
+    const genres = movie.genres.map(g => g.name).join('/');
+    
+    // Format runtime
+    const runtime = movie.runtime ? `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m` : '';
+    
+    // Get primary language
+    const language = movie.spoken_languages?.[0]?.english_name || 
+                    movie.original_language || 
+                    'English';
+    
+    // Get director from crew
+    const director = movie.credits?.crew?.find(person => person.job === 'Director')?.name || '';
+    
+    // Get main cast (first 3 actors)
+    const cast = movie.credits?.cast?.slice(0, 3).map(actor => actor.name).join(', ') || '';
+    
+    // Format release date
+    const releaseDate = movie.release_date ? movie.release_date : '';
+    
+    // Determine format based on movie popularity/type (simplified logic)
+    const format = movie.vote_average > 7.5 ? '3D' : '2D';
+    
+    // Update form data
+    setFormData(prev => ({
+      ...prev,
+      title: movie.title,
+      genre: genres,
+      duration: runtime,
+      posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : '',
+      language: language,
+      director: director,
+      cast: cast,
+      releaseDate: releaseDate,
+      format: format as '2D' | '3D',
+      description: movie.overview || ''
+    }));
+    
+    // Clear any existing errors
+    setErrors({});
+  };
 
   useEffect(() => {
     // Simulate loading movies
@@ -260,6 +308,7 @@ const MovieManagement: React.FC = () => {
     setShowAddModal(false);
     setEditingMovie(null);
     setIsEditMode(false);
+    setSelectedMovie(null);
     setFormData({
       title: '',
       genre: '',
@@ -474,11 +523,19 @@ const MovieManagement: React.FC = () => {
             <div className="p-8">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Movie Title */}
+                  {/* Movie Title with Search */}
                   <div className="md:col-span-2">
                     <label htmlFor="title" className="block text-sm font-medium text-white mb-2">
-                      Movie Title *
+                      Movie Title * 
+                      <span className="text-brand-light-gray text-xs ml-2">
+                        (Search TMDB for auto-fill)
+                      </span>
                     </label>
+                    <MovieSearchInput
+                      onMovieSelect={handleMovieSelect}
+                      placeholder="Search for movies to auto-fill details..."
+                      className="mb-2"
+                    />
                     <input
                       type="text"
                       id="title"
@@ -488,7 +545,7 @@ const MovieManagement: React.FC = () => {
                       className={`w-full px-4 py-3 bg-brand-dark border rounded-xl text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red ${
                         errors.title ? 'border-red-500' : 'border-brand-dark/30'
                       }`}
-                      placeholder="Enter movie title"
+                      placeholder="Or enter movie title manually"
                     />
                     {errors.title && (
                       <p className="text-red-400 text-sm mt-1 flex items-center">
@@ -758,10 +815,45 @@ const MovieManagement: React.FC = () => {
                 <div className="p-6">
                   <h3 className="text-xl font-bold text-white mb-1">{formData.title || 'Movie Title'}</h3>
                   <p className="text-brand-light-gray text-sm mb-3">{formData.genre || 'Genre'}</p>
+                  
+                  {/* TMDB Rating if available */}
+                  {selectedMovie && (
+                    <div className="flex items-center space-x-2 mb-3">
+                      <div className="flex items-center space-x-1">
+                        <i className="fas fa-star text-yellow-400 text-sm"></i>
+                        <span className="text-yellow-400 font-semibold text-sm">
+                          {selectedMovie.vote_average.toFixed(1)}
+                        </span>
+                      </div>
+                      <span className="text-brand-light-gray text-xs">
+                        ({selectedMovie.vote_count} votes)
+                      </span>
+                    </div>
+                  )}
+                  
                   <div className="flex items-center justify-between text-sm text-brand-light-gray mb-4">
                     <span>{formData.duration || 'Duration'}</span>
                     <span className="font-bold text-white">{formData.format}</span>
                   </div>
+                  
+                  {/* Director and Language */}
+                  {(formData.director || formData.language) && (
+                    <div className="space-y-2 mb-4">
+                      {formData.director && (
+                        <div className="flex items-center space-x-2">
+                          <i className="fas fa-user text-brand-light-gray text-xs"></i>
+                          <span className="text-brand-light-gray text-xs">Director: {formData.director}</span>
+                        </div>
+                      )}
+                      {formData.language && (
+                        <div className="flex items-center space-x-2">
+                          <i className="fas fa-globe text-brand-light-gray text-xs"></i>
+                          <span className="text-brand-light-gray text-xs">Language: {formData.language}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
                   <div>
                     <p className="text-brand-light-gray text-sm mb-2">Showtimes:</p>
                     <div className="flex flex-wrap gap-2">
@@ -770,6 +862,15 @@ const MovieManagement: React.FC = () => {
                       ))}
                     </div>
                   </div>
+                  
+                  {/* Description preview */}
+                  {formData.description && (
+                    <div className="mt-4">
+                      <p className="text-brand-light-gray text-xs leading-relaxed line-clamp-3">
+                        {formData.description}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
