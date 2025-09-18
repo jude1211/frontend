@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import BookNViewLoader from '../components/BookNViewLoader';
 import MovieSearchInput, { TMDBMovieDetails } from '../components/MovieSearchInput';
 import Modal from '../components/Modal';
+import { apiService } from '../services/api';
 
 interface Movie {
-  id: string;
+  _id: string;
   title: string;
   genre: string;
   duration: string;
-  rating: number; // Derived from customer reviews
+  rating?: number; // Derived from customer reviews
   posterUrl: string;
   status: 'active' | 'inactive' | 'coming_soon';
   showtimes: string[];
@@ -16,8 +17,16 @@ interface Movie {
   description?: string;
   director?: string;
   cast?: string[];
-  language?: string;
+  language?: string; // backend internal field (kept as 'english')
+  movieLanguage?: string; // actual language typed by theatre owner
   releaseDate?: string;
+  theatreOwner?: {
+    _id: string;
+    theatreName: string;
+    ownerName: string;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface MovieFormData {
@@ -42,6 +51,7 @@ const MovieManagement: React.FC = () => {
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string>('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [movieToDelete, setMovieToDelete] = useState<Movie | null>(null);
   const [formData, setFormData] = useState<MovieFormData>({
@@ -64,87 +74,80 @@ const MovieManagement: React.FC = () => {
   // Auto-fill form with TMDB movie data
   const handleMovieSelect = (movie: TMDBMovieDetails) => {
     setSelectedMovie(movie);
-    
+
     // Extract genres
     const genres = movie.genres.map(g => g.name).join('/');
-    
+
     // Format runtime
     const runtime = movie.runtime ? `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m` : '';
-    
-    // Get primary language
-    const language = movie.spoken_languages?.[0]?.english_name || 
-                    movie.original_language || 
-                    'English';
-    
-    // Get director from crew
+
+    // Suggested language (owner can override)
+    const suggestedLanguage = movie.spoken_languages?.[0]?.english_name || movie.original_language || 'English';
+
+    // Get director and main cast
     const director = movie.credits?.crew?.find(person => person.job === 'Director')?.name || '';
-    
-    // Get main cast (first 3 actors)
     const cast = movie.credits?.cast?.slice(0, 3).map(actor => actor.name).join(', ') || '';
-    
-    // Format release date
+
+    // Release date
     const releaseDate = movie.release_date ? movie.release_date : '';
-    
-    // Determine format based on movie popularity/type (simplified logic)
-    const format = movie.vote_average > 7.5 ? '3D' : '2D';
-    
-    // Update form data
+
+    // Suggested format (owner can override)
+    const suggestedFormat = (movie.vote_average > 7.5 ? '3D' : '2D') as '2D' | '3D';
+
+    // Update form data without overriding owner selections for Format/Language/Status
     setFormData(prev => ({
       ...prev,
       title: movie.title,
       genre: genres,
-      duration: runtime,
-      posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : '',
-      language: language,
-      director: director,
-      cast: cast,
-      releaseDate: releaseDate,
-      format: format as '2D' | '3D',
-      description: movie.overview || ''
+      duration: runtime || prev.duration,
+      posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : prev.posterUrl,
+      // preserve owner-chosen fields; only suggest if empty
+      language: prev.language?.trim() ? prev.language : suggestedLanguage,
+      format: (prev.format || '2D') as '2D' | '3D',
+      status: (prev.status || 'active') as 'active' | 'inactive' | 'coming_soon',
+      director: director || prev.director,
+      cast: cast || prev.cast,
+      releaseDate: releaseDate || prev.releaseDate,
+      description: movie.overview || prev.description
     }));
-    
+
+    // Don’t force the suggested format if owner has already chosen; if empty, use suggestion
+    setFormData(prev => ({
+      ...prev,
+      format: (prev.format || suggestedFormat) as '2D' | '3D'
+    }));
+
     // Clear any existing errors
     setErrors({});
   };
 
   useEffect(() => {
-    // Simulate loading movies
-    setMovies([
-      {
-        id: '1',
-        title: 'Superman',
-        genre: 'Action/Adventure/Fantasy',
-        duration: '2h 30m',
-        rating: 8.8,
-        posterUrl: 'https://picsum.photos/seed/superman/400/600',
-        status: 'active',
-        showtimes: ['10:00 AM', '1:30 PM', '7:30 PM'],
-        format: '2D'
-      },
-      {
-        id: '2',
-        title: 'Saiyara',
-        genre: 'Drama/Musical/Romantic',
-        duration: '2h 45m',
-        rating: 9.1,
-        posterUrl: 'https://picsum.photos/seed/saiyara/400/600',
-        status: 'active',
-        showtimes: ['11:00 AM', '3:00 PM', '8:00 PM'],
-        format: '3D'
-      },
-      {
-        id: '3',
-        title: 'F1: The Movie',
-        genre: 'Action/Drama/Sports',
-        duration: '2h 15m',
-        rating: 8.5,
-        posterUrl: 'https://picsum.photos/seed/f1movie/400/600',
-        status: 'active',
-        showtimes: ['9:30 AM', '2:00 PM', '6:30 PM'],
-        format: '2D'
-      }
-    ]);
+    fetchMovies();
   }, []);
+
+  const fetchMovies = async () => {
+    try {
+      setIsLoading(true);
+      const theatreOwnerData = JSON.parse(localStorage.getItem('theatreOwnerData') || '{}');
+      const theatreOwnerId = theatreOwnerData._id;
+      
+      if (!theatreOwnerId) {
+        console.error('Theatre owner ID not found');
+        return;
+      }
+
+      const response = await apiService.getTheatreOwnerMovies(theatreOwnerId);
+      if (response.success && response.data) {
+        setMovies(response.data);
+      } else {
+        console.error('Failed to fetch movies:', response.error);
+      }
+    } catch (error) {
+      console.error('Error fetching movies:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -214,9 +217,11 @@ const MovieManagement: React.FC = () => {
     if (!formData.duration.trim()) newErrors.duration = 'Duration is required';
     if (!formData.showtimes.trim()) newErrors.showtimes = 'Showtimes are required';
 
-    // Validate duration format (e.g., "2h 30m")
-    if (formData.duration && !/^\d+h\s+\d+m$/.test(formData.duration)) {
-      newErrors.duration = 'Duration should be in format "2h 30m"';
+    // Accept formats like "2h 30m", "2h", or "150m"
+    const durationText = formData.duration ? formData.duration.trim() : '';
+    const durationOk = /^(\d+h\s*\d+m|\d+h|\d+m)$/.test(durationText);
+    if (formData.duration && !durationOk) {
+      newErrors.duration = 'Use formats like 2h 30m, 2h, or 150m';
     }
 
     // Validate showtimes format (H:MM AM/PM) and no leading zero hour
@@ -232,12 +237,14 @@ const MovieManagement: React.FC = () => {
     e.preventDefault();
     
     if (!validateForm()) {
+      setSubmitError('Please fix the highlighted fields.');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
+      setSubmitError('');
       const movieData = {
         title: formData.title,
         genre: formData.genre,
@@ -251,34 +258,35 @@ const MovieManagement: React.FC = () => {
         language: formData.language,
         releaseDate: formData.releaseDate,
         format: formData.format
-      } as Omit<Movie, 'id' | 'rating'>;
-
-      // For now, simulate API call - in real app, make actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      };
 
       if (isEditMode && editingMovie) {
-        // Update existing movie (keep rating from reviews)
-        const updatedMovie: Movie = {
-          ...editingMovie,
-          ...movieData,
-          rating: editingMovie.rating
-        };
-
-        setMovies(prev => prev.map(movie => 
-          movie.id === editingMovie.id ? updatedMovie : movie
-        ));
+        // Update existing movie
+        const response = await apiService.updateMovie(editingMovie._id, movieData);
+        if (response.success) {
+          // Refresh movies list to get updated data
+          await fetchMovies();
+          setShowAddModal(false);
+          setEditingMovie(null);
+          setIsEditMode(false);
+        } else {
+          console.error('Failed to update movie:', response.error);
+          setSubmitError(response.error || 'Failed to update movie');
+        }
       } else {
-        // Add new movie with default rating of 0 (will be computed from reviews)
-        const newMovie: Movie = {
-          id: (movies.length + 1).toString(),
-          ...movieData,
-          rating: 0
-        };
-
-        setMovies(prev => [...prev, newMovie]);
+        // Add new movie
+        const response = await apiService.addMovie(movieData);
+        if (response.success) {
+          // Refresh movies list to get the new movie
+          await fetchMovies();
+          setShowAddModal(false);
+        } else {
+          console.error('Failed to add movie:', response.error);
+          setSubmitError(response.error || 'Failed to add movie');
+        }
       }
       
-      // Reset form and close modal
+      // Reset form
       setFormData({
         title: '',
         genre: '',
@@ -293,12 +301,12 @@ const MovieManagement: React.FC = () => {
         language: 'English',
         releaseDate: ''
       });
-      setShowAddModal(false);
+      setSelectedMovie(null);
       setErrors({});
 
     } catch (error) {
-      console.error('Error adding movie:', error);
-      // Handle error (show toast notification, etc.)
+      console.error('Error saving movie:', error);
+      setSubmitError((error && (error as any).message) || 'Something went wrong. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -308,6 +316,7 @@ const MovieManagement: React.FC = () => {
     setShowAddModal(false);
     setEditingMovie(null);
     setIsEditMode(false);
+    setSubmitError('');
     setSelectedMovie(null);
     setFormData({
       title: '',
@@ -356,14 +365,15 @@ const MovieManagement: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Remove from local state
-      setMovies(prev => prev.filter(movie => movie.id !== movieToDelete.id));
-      
-      setShowDeleteModal(false);
-      setMovieToDelete(null);
+      const response = await apiService.deleteMovie(movieToDelete._id);
+      if (response.success) {
+        // Refresh movies list to reflect the deletion
+        await fetchMovies();
+        setShowDeleteModal(false);
+        setMovieToDelete(null);
+      } else {
+        console.error('Failed to delete movie:', response.error);
+      }
     } catch (error) {
       console.error('Error deleting movie:', error);
     } finally {
@@ -425,65 +435,140 @@ const MovieManagement: React.FC = () => {
           </div>
         </div>
 
-        {/* Movies Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {movies.map((movie) => (
-            <div key={movie.id} className="bg-brand-gray rounded-2xl border border-brand-dark/40 shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+        {/* Movies Grid - BookMyShow Style */}
+        {movies.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-24 h-24 bg-brand-dark rounded-full flex items-center justify-center mx-auto mb-6">
+              <i className="fas fa-film text-4xl text-brand-light-gray"></i>
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-4">No Movies Yet</h3>
+            <p className="text-brand-light-gray mb-8 max-w-md mx-auto">
+              Start building your movie lineup by adding your first movie. Your audience is waiting!
+            </p>
+            <button 
+              onClick={() => setShowAddModal(true)}
+              className="bg-brand-red text-white px-8 py-3 rounded-xl hover:bg-red-600 transition-all duration-300 flex items-center space-x-2 mx-auto"
+            >
+              <i className="fas fa-plus"></i>
+              <span>Add Your First Movie</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {movies.map((movie) => (
+            <div key={movie._id} className="bg-brand-gray rounded-2xl border border-brand-dark/40 shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-105 group">
               {/* Movie Poster */}
-              <div className="relative">
+              <div className="relative overflow-hidden">
                 <img 
-                  src={movie.posterUrl} 
+                  src={movie.posterUrl || 'https://via.placeholder.com/300x400/333/fff?text=No+Image'} 
                   alt={movie.title}
-                  className="w-full h-64 object-cover"
+                  className="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-300"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x400/333/fff?text=No+Image';
+                  }}
                 />
-                <div className="absolute top-4 right-4 flex items-center space-x-2">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(movie.status)}`}>
-                    {movie.status.replace('_', ' ')}
+                
+                {/* Status Badges */}
+                <div className="absolute top-4 right-4 flex flex-col space-y-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(movie.status)}`}>
+                    {movie.status.replace('_', ' ').toUpperCase()}
                   </span>
-                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-black/70 text-white">
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-600 to-purple-700 text-white">
                     {movie.format}
                   </span>
                 </div>
-                <div className="absolute bottom-4 left-4">
-                  <div className="bg-black/70 text-white px-2 py-1 rounded text-sm">
-                    ⭐ {movie.rating}/10
+
+                {/* Rating Badge */}
+                {movie.rating && movie.rating > 0 && (
+                  <div className="absolute bottom-4 left-4">
+                    <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-black px-3 py-1 rounded-full text-sm font-bold flex items-center">
+                      <i className="fas fa-star mr-1"></i>
+                      {movie.rating.toFixed(1)}
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* Language Badge */}
+                  {(movie.movieLanguage || movie.language) && (
+                  <div className="absolute bottom-4 right-4">
+                    <div className="bg-black/80 text-white px-2 py-1 rounded text-xs font-medium">
+                      {movie.movieLanguage || movie.language}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Movie Info */}
               <div className="p-6">
-                <h3 className="text-xl font-bold text-white mb-2">{movie.title}</h3>
-                <p className="text-brand-light-gray text-sm mb-3">{movie.genre}</p>
+                <h3 className="text-xl font-bold text-white mb-2 line-clamp-2 group-hover:text-brand-red transition-colors">
+                  {movie.title}
+                </h3>
+                
+                <p className="text-brand-light-gray text-sm mb-3 line-clamp-1">
+                  {movie.genre}
+                </p>
+
+                {/* Director */}
+                {movie.director && (
+                  <p className="text-brand-light-gray text-xs mb-2 line-clamp-1">
+                    <i className="fas fa-user mr-1"></i>
+                    {movie.director}
+                  </p>
+                )}
+
+                {/* Duration and Release Date */}
                 <div className="flex items-center justify-between text-sm text-brand-light-gray mb-4">
-                  <span>{movie.duration}</span>
-                  <span className="font-bold text-white">{movie.format}</span>
+                  <div className="flex items-center">
+                    <i className="fas fa-clock mr-1"></i>
+                    <span>{movie.duration}</span>
+                  </div>
+                  {movie.releaseDate && (
+                    <div className="flex items-center">
+                      <i className="fas fa-calendar mr-1"></i>
+                      <span>{new Date(movie.releaseDate).getFullYear()}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Showtimes */}
                 <div className="mb-4">
-                  <p className="text-brand-light-gray text-sm mb-2">Showtimes:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {movie.showtimes.map((time, index) => (
-                      <span key={index} className="bg-brand-dark text-white px-2 py-1 rounded text-xs">
+                  <p className="text-brand-light-gray text-sm mb-2 font-medium">
+                    <i className="fas fa-clock mr-1"></i>
+                    Showtimes:
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {movie.showtimes.slice(0, 3).map((time, index) => (
+                      <span key={index} className="bg-gradient-to-r from-brand-red to-red-600 text-white px-2 py-1 rounded text-xs font-medium">
                         {time}
                       </span>
                     ))}
+                    {movie.showtimes.length > 3 && (
+                      <span className="bg-brand-dark text-brand-light-gray px-2 py-1 rounded text-xs">
+                        +{movie.showtimes.length - 3} more
+                      </span>
+                    )}
                   </div>
                 </div>
+
+                {/* Description Preview */}
+                {movie.description && (
+                  <p className="text-brand-light-gray text-xs mb-4 line-clamp-2">
+                    {movie.description}
+                  </p>
+                )}
 
                 {/* Actions */}
                 <div className="flex space-x-2">
                   <button 
                     onClick={() => handleEditMovie(movie)}
-                    className="flex-1 bg-brand-red text-white py-2 rounded-lg hover:bg-red-600 transition-colors text-sm"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 text-sm font-medium flex items-center justify-center"
                   >
                     <i className="fas fa-edit mr-1"></i>
                     Edit
                   </button>
                   <button 
                     onClick={() => handleDeleteMovie(movie)}
-                    className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition-colors text-sm"
+                    className="flex-1 bg-gradient-to-r from-red-600 to-red-700 text-white py-2 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 text-sm font-medium flex items-center justify-center"
                   >
                     <i className="fas fa-trash mr-1"></i>
                     Delete
@@ -491,8 +576,9 @@ const MovieManagement: React.FC = () => {
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Add Movie Modal */}
@@ -625,15 +711,34 @@ const MovieManagement: React.FC = () => {
                     <label htmlFor="language" className="block text-sm font-medium text-white mb-2">
                       Language
                     </label>
-                    <input
-                      type="text"
+                    <select
                       id="language"
                       name="language"
                       value={formData.language}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-3 bg-brand-dark border border-brand-dark/30 rounded-xl text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
-                      placeholder="e.g., English, Hindi"
-                    />
+                      className="w-full px-4 py-3 bg-brand-dark border border-brand-dark/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
+                    >
+                      <option value="">Select language</option>
+                      <option value="English">English</option>
+                      <option value="Hindi">Hindi</option>
+                      <option value="Marathi">Marathi</option>
+                      <option value="Bengali">Bengali</option>
+                      <option value="Tamil">Tamil</option>
+                      <option value="Telugu">Telugu</option>
+                      <option value="Kannada">Kannada</option>
+                      <option value="Malayalam">Malayalam</option>
+                      <option value="Gujarati">Gujarati</option>
+                      <option value="Punjabi">Punjabi</option>
+                      <option value="Odia">Odia</option>
+                      <option value="Assamese">Assamese</option>
+                      <option value="Urdu">Urdu</option>
+                      <option value="Bhojpuri">Bhojpuri</option>
+                      <option value="Rajasthani">Rajasthani</option>
+                      <option value="Konkani">Konkani</option>
+                      <option value="Sindhi">Sindhi</option>
+                      <option value="Sanskrit">Sanskrit</option>
+                      <option value="Tulu">Tulu</option>
+                    </select>
                   </div>
 
                   {/* Status */}
@@ -792,6 +897,12 @@ const MovieManagement: React.FC = () => {
                   </button>
                 </div>
               </form>
+              {submitError && (
+                <div className="mt-3 text-red-400 text-sm flex items-center">
+                  <i className="fas fa-circle-exclamation mr-2"></i>
+                  <span>{submitError}</span>
+                </div>
+              )}
             </div>
 
             {/* Right: Live Preview */}

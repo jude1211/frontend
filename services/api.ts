@@ -540,6 +540,50 @@ class ApiService {
       }
     });
   }
+
+  // Movie Management Methods for Theatre Owners
+  async addMovie(movieData: any): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>('/movies', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(movieData)
+    });
+  }
+
+  async getTheatreOwnerMovies(theatreOwnerId: string): Promise<ApiResponse<any[]>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any[]>(`/movies/theatre-owner/${theatreOwnerId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  async updateMovie(movieId: string, movieData: any): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/movies/${movieId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(movieData)
+    });
+  }
+
+  async deleteMovie(movieId: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/movies/${movieId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
 }
 
 export const apiService = new ApiService();
