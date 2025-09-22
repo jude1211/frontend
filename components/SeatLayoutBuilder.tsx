@@ -9,6 +9,7 @@ export interface SeatClassRule {
   price: number;
   tier: PricingTier;
   color: string; // hex or tailwind color for legend; SeatPicker colors are limited, so we show legend
+  layout?: { numRows: number; numCols: number; aisleColumns: number[] };
 }
 
 export interface SeatLayoutConfig {
@@ -57,65 +58,44 @@ function findSeatClassForRow(rowLabel: string, rules: SeatClassRule[]): SeatClas
 }
 
 const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReservableSeats = 10, onSeatClick, editMode = false, onManualLayoutChange, onSeatGridChange }) => {
-  const { rows, legend, groups, classByName } = useMemo(() => {
-    const generatedRows: any[][] = [];
+  const { groups, legend, classByName } = useMemo(() => {
     const legendMap = new Map<string, SeatClassRule>();
-    const classGroups: Array<{ startIndex: number; endIndex: number; rule?: SeatClassRule }> = [];
     const classByNameMap = new Map<string, SeatClassRule>();
+    const classGroups: Array<{ rule: SeatClassRule; rows: any[][] }> = [];
 
-    for (let r = 0; r < config.numRows; r++) {
-      const rowLabel = getRowLabel(r);
-      const rowClass = findSeatClassForRow(rowLabel, config.seatClassRules);
-      if (rowClass) {
-        legendMap.set(rowClass.className, rowClass);
-        classByNameMap.set(rowClass.className, rowClass);
-      }
-
-      const row: any[] = [];
-      const totalVisualCols = config.numCols + config.aisleColumns.length;
-      let seatCounter = 0;
-      for (let c = 1; c <= totalVisualCols; c++) {
-        if (config.aisleColumns.includes(c)) {
-          row.push(null);
-          continue;
+    config.seatClassRules.forEach((rule) => {
+      legendMap.set(rule.className, rule);
+      classByNameMap.set(rule.className, rule);
+      const layout = rule.layout || { numRows: config.numRows, numCols: config.numCols, aisleColumns: config.aisleColumns };
+      const rows: any[][] = [];
+      for (let r = 0; r < layout.numRows; r++) {
+        const rowLabel = getRowLabel(r);
+        const totalVisualCols = layout.numCols + layout.aisleColumns.length;
+        let seatCounter = 0;
+        const row: any[] = [];
+        for (let c = 1; c <= totalVisualCols; c++) {
+          if (layout.aisleColumns.includes(c)) {
+            row.push(null);
+            continue;
+          }
+          seatCounter += 1;
+          const seatId = `${rowLabel}-${seatCounter}`;
+          const tooltip = `${rowLabel}${seatCounter} · ${rule.className} · ₹${rule.price} · ${rule.tier}`;
+          const isVip = rule.tier === 'VIP';
+          row.push({ id: seatId, number: seatCounter, tooltip, isReserved: false, isVIP: isVip, isEmpty: false });
         }
-        seatCounter += 1;
-        const seatId = `${rowLabel}-${seatCounter}`;
-        const tooltip = `${rowLabel}${seatCounter} · ${rowClass ? rowClass.className : 'Standard'} · ₹${rowClass ? rowClass.price : 0} · ${rowClass ? rowClass.tier : 'Base'}`;
-        const isVip = rowClass?.tier === 'VIP';
-        row.push({
-          id: seatId,
-          number: seatCounter,
-          tooltip,
-          isReserved: false,
-          isVIP: isVip,
-          isEmpty: false,
-        });
+        rows.push(row);
       }
-      generatedRows.push(row);
+      classGroups.push({ rule, rows });
+    });
 
-      // Track contiguous groups per class for section headers/previews
-      const prev = classGroups[classGroups.length - 1];
-      if (!prev) {
-        classGroups.push({ startIndex: r, endIndex: r, rule: rowClass });
-      } else if (
-        (prev.rule?.className || '') === (rowClass?.className || '') &&
-        (prev.rule?.price || 0) === (rowClass?.price || 0) &&
-        (prev.rule?.tier || '') === (rowClass?.tier || '')
-      ) {
-        prev.endIndex = r;
-      } else {
-        classGroups.push({ startIndex: r, endIndex: r, rule: rowClass });
-      }
-    }
-
-    return { rows: generatedRows, legend: Array.from(legendMap.values()), groups: classGroups, classByName: classByNameMap };
+    return { groups: classGroups, legend: Array.from(legendMap.values()), classByName: classByNameMap };
   }, [config]);
 
-  const [editableRows, setEditableRows] = React.useState<any[][]>(rows);
+  const [editableRowsByGroup, setEditableRowsByGroup] = React.useState<any[][][]>(groups.map(g => g.rows));
   React.useEffect(() => {
-    setEditableRows(rows);
-  }, [rows]);
+    setEditableRowsByGroup(groups.map(g => g.rows));
+  }, [groups]);
 
   const emitManual = (next: any[][]) => {
     const ids = next.map(r => r.map(cell => (cell && !cell.isEmpty ? cell.id : '')));
@@ -134,42 +114,44 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
   };
 
   React.useEffect(() => {
-    emitManual(editableRows);
+    const flat: any[][] = [];
+    editableRowsByGroup.forEach(gr => gr.forEach(r => flat.push(r)));
+    emitManual(flat);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editableRows]);
+  }, [editableRowsByGroup]);
 
-  const [dragFrom, setDragFrom] = React.useState<{ r: number; c: number } | null>(null);
+  const [dragFrom, setDragFrom] = React.useState<{ g: number; r: number; c: number } | null>(null);
   const [hoverTarget, setHoverTarget] = React.useState<{ r: number; c: number } | null>(null);
-  const onDragStart = (r: number, c: number) => (e: React.DragEvent) => {
+  const onDragStart = (g: number, r: number, c: number) => (e: React.DragEvent) => {
     // Some browsers require data to start a drag operation
-    try { e.dataTransfer.setData('text/plain', `${r},${c}`); } catch {}
+    try { e.dataTransfer.setData('text/plain', `${g},${r},${c}`); } catch {}
     e.dataTransfer.effectAllowed = 'move';
-    setDragFrom({ r, c });
+    setDragFrom({ g, r, c });
   };
   const onDragOver = (toR: number, toC: number) => (e: React.DragEvent) => {
     e.preventDefault();
     setHoverTarget({ r: toR, c: toC });
   };
   const onDragLeave = () => setHoverTarget(null);
-  const onDrop = (toR: number, toC: number) => (e: React.DragEvent) => {
+  const onDrop = (toG: number, toR: number, toC: number) => (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!dragFrom) return;
-    setEditableRows((prev) => {
-      const next = prev.map(row => row.slice());
-      const a = next[dragFrom.r][dragFrom.c];
-      const b = next[toR][toC];
+    setEditableRowsByGroup((prev) => {
+      const next = prev.map(group => group.map(row => row.slice()));
+      const a = next[dragFrom.g][dragFrom.r][dragFrom.c];
+      const b = next[toG][toR][toC];
       // Prevent dropping into aisles; only snap to valid grid blocks
       if (a === null || b === null) return prev;
       if (b.isEmpty) {
         // move into empty block
         const placeholder = { ...b };
-        next[toR][toC] = a;
-        next[dragFrom.r][dragFrom.c] = placeholder;
+        next[toG][toR][toC] = a;
+        next[dragFrom.g][dragFrom.r][dragFrom.c] = placeholder;
       } else {
         // swap seats
-        next[dragFrom.r][dragFrom.c] = b;
-        next[toR][toC] = a;
+        next[dragFrom.g][dragFrom.r][dragFrom.c] = b;
+        next[toG][toR][toC] = a;
       }
       return next;
     });
@@ -178,17 +160,17 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
   };
   const onDragEnd = () => setHoverTarget(null);
 
-  const handleCellClickEdit = (r: number, c: number, rowLabel: string, ruleColor: string) => (e?: React.MouseEvent) => {
+  const handleCellClickEdit = (g: number, r: number, c: number, rowLabel: string, ruleColor: string) => (e?: React.MouseEvent) => {
     if (!editMode) return;
-    setEditableRows(prev => {
-      const next = prev.map(row => row.slice());
-      const cell = next[r][c];
+    setEditableRowsByGroup(prev => {
+      const next = prev.map(group => group.map(row => row.slice()));
+      const cell = next[g][r][c];
       if (cell === null) return prev; // aisle
       if (cell.isEmpty) {
         // add seat using the row's current class rule (Gold/Silver/Balcony)
-        const classRule = findSeatClassForRow(rowLabel, config.seatClassRules);
+        const classRule = config.seatClassRules[g];
         const seatId = `${rowLabel}-${cell.number}`;
-        next[r][c] = {
+        next[g][r][c] = {
           id: seatId,
           number: cell.number,
           tooltip: `${rowLabel}${cell.number} · ${classRule ? classRule.className : 'Standard'} · ₹${classRule ? classRule.price : 0} · ${classRule ? classRule.tier : 'Base'}`,
@@ -198,21 +180,21 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
         };
       } else if (e && (e.ctrlKey || e.altKey || e.shiftKey)) {
         // quick delete with modifier key
-        next[r][c] = { ...cell, id: '', tooltip: '', isReserved: false, isVIP: false, isEmpty: true };
+        next[g][r][c] = { ...cell, id: '', tooltip: '', isReserved: false, isVIP: false, isEmpty: true };
       }
       return next;
     });
   };
 
-  const deleteSeatAt = (r: number, c: number) => (e: React.MouseEvent) => {
+  const deleteSeatAt = (g: number, r: number, c: number) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!editMode) return;
-    setEditableRows(prev => {
-      const next = prev.map(row => row.slice());
-      const cell = next[r][c];
+    setEditableRowsByGroup(prev => {
+      const next = prev.map(group => group.map(row => row.slice()));
+      const cell = next[g][r][c];
       if (!cell || cell === null) return prev;
-      next[r][c] = { ...cell, id: '', tooltip: '', isReserved: false, isVIP: false, isEmpty: true };
+      next[g][r][c] = { ...cell, id: '', tooltip: '', isReserved: false, isVIP: false, isEmpty: true };
       return next;
     });
   };
@@ -258,7 +240,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
             const header = g.rule ? `${g.rule.className}` : 'Standard';
             const price = g.rule ? `₹${g.rule.price}` : '';
             const tier = g.rule ? g.rule.tier : '';
-              const slice = (editMode ? editableRows : rows).slice(g.startIndex, g.endIndex + 1);
+              const slice = (editMode ? editableRowsByGroup[idx] : g.rows);
             return (
               <div key={`${header}-${idx}`}>
                 <div className="text-center text-xs md:text-sm text-gray-300 mb-2">
@@ -272,10 +254,10 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
                       <div>
                         {slice.map((row, rowIdx) => (
                           <div key={rowIdx} className="flex items-center mb-1">
-                            <div className="w-6 text-right pr-2 text-xs text-gray-400">{getRowLabel(g.startIndex + rowIdx)}</div>
+                            <div className="w-6 text-right pr-2 text-xs text-gray-400">{getRowLabel(rowIdx)}</div>
                             <div className="flex">
                               {row.map((cell, colIdx) => {
-                                const globalR = g.startIndex + rowIdx;
+                                const globalR = rowIdx;
                                 const globalC = colIdx;
                                 const isHover = hoverTarget && hoverTarget.r === globalR && hoverTarget.c === globalC;
                                 if (cell === null) {
@@ -288,7 +270,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
                                     key={colIdx}
                                     onDragOver={onDragOver(globalR, globalC)}
                                     onDragLeave={onDragLeave}
-                                    onDrop={onDrop(globalR, globalC)}
+                                    onDrop={onDrop(idx, globalR, globalC)}
                                     className={`w-6 h-6 mx-0.5 rounded relative group`}
                                   >
                                     {/* placeholder highlight for snap block */}
@@ -300,7 +282,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
                                     )}
                                     {cell.isEmpty ? (
                                       <button
-                                        onClick={handleCellClickEdit(globalR, globalC, getRowLabel(globalR), ruleColor)}
+                                        onClick={handleCellClickEdit(idx, globalR, globalC, getRowLabel(globalR), ruleColor)}
                                         className="w-full h-full rounded border border-dashed text-[10px] text-gray-400 flex items-center justify-center"
                                         style={{ borderColor: `${ruleColor}77`, backgroundColor: 'transparent' }}
                                         title="Add seat here"
@@ -311,9 +293,9 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
                                       <>
                                         <button
                                           draggable
-                                          onDragStart={onDragStart(globalR, globalC)}
+                                          onDragStart={onDragStart(idx, globalR, globalC)}
                                           onDragEnd={onDragEnd}
-                                          onClick={handleCellClickEdit(globalR, globalC, getRowLabel(globalR), ruleColor)}
+                                          onClick={handleCellClickEdit(idx, globalR, globalC, getRowLabel(globalR), ruleColor)}
                                           title={cell.tooltip}
                                           className="w-full h-full rounded border text-[10px] text-gray-200 flex items-center justify-center"
                                           style={{ backgroundColor: 'rgba(34,197,94,0.08)', borderColor: ruleColor, borderWidth: 2 as any }}
@@ -324,7 +306,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
                                           aria-label="Delete seat"
                                           className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-600 text-white text-[9px] leading-3 hidden group-hover:flex items-center justify-center"
                                           style={{ zIndex: 10 as any }}
-                                          onClick={deleteSeatAt(globalR, globalC)}
+                                          onClick={deleteSeatAt(idx, globalR, globalC)}
                                         >
                                           ×
                                         </button>
@@ -343,17 +325,17 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
                       <div>
                         {slice.map((row, rowIdx) => (
                           <div key={rowIdx} className="flex items-center mb-1">
-                            <div className="w-6 text-right pr-2 text-xs text-gray-400">{getRowLabel(g.startIndex + rowIdx)}</div>
+                            <div className="w-6 text-right pr-2 text-xs text-gray-400">{getRowLabel(rowIdx)}</div>
                             <div className="flex">
                               {row.map((cell, colIdx) => {
-                                const globalR = g.startIndex + rowIdx;
+                                const globalR = rowIdx;
                                 const globalC = colIdx;
                                 if (cell === null) {
                                   return <div key={colIdx} className="w-6 h-6 mx-0.5"></div>;
                                 }
                                 const ruleColor = g.rule?.color || '#22c55e';
                                 const rowLabel = getRowLabel(globalR);
-                                const seatClass = findSeatClassForRow(rowLabel, config.seatClassRules);
+                                const seatClass = config.seatClassRules[idx];
                                 return (
                                   <button
                                     key={colIdx}

@@ -30,12 +30,27 @@ const ScreenManagement: React.FC = () => {
   const [selectedSeatInfo, setSelectedSeatInfo] = useState<{ id: string; rowLabel: string; columnNumber: number; seatClass?: SeatClassRule } | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [manualLayout, setManualLayout] = useState<string[][] | null>(null);
+  const [seatStats, setSeatStats] = useState<{ total: number; byClass: Record<string, number> }>({ total: 0, byClass: {} });
+  const [aisleInput, setAisleInput] = useState<string>('5, 9');
+  const [aisleError, setAisleError] = useState<boolean>(false);
+  const updateRuleLayout = (idx: number, patch: Partial<{ numRows: number; numCols: number; aisleColumns: number[] }>) => {
+    setSeatConfig(prev => {
+      const rules = prev.seatClassRules.slice();
+      const existing = rules[idx];
+      const current = existing.layout || { numRows: prev.numRows, numCols: prev.numCols, aisleColumns: prev.aisleColumns };
+      rules[idx] = { ...existing, layout: { ...current, ...patch } } as any;
+      return { ...prev, seatClassRules: rules };
+    });
+  };
 
   const handleConfigNumberChange = (key: 'numRows' | 'numCols', value: number) => {
     setSeatConfig((prev) => ({ ...prev, [key]: Math.max(1, value || 0) }));
   };
 
   const handleAislesChange = (value: string) => {
+    setAisleInput(value);
+    const needsComma = value.trim().length > 0 && !value.includes(',');
+    setAisleError(needsComma);
     const parsed = value
       .split(',')
       .map((v) => parseInt(v.trim(), 10))
@@ -110,6 +125,44 @@ const ScreenManagement: React.FC = () => {
         occupancy: 0
       }
     ]);
+    // Prefill from signup if available
+    try {
+      const rawSignup = localStorage.getItem('theatreOwnerSignupScreens');
+      const rawOwner = localStorage.getItem('theatreOwnerData');
+      let screensFromSignup: any[] | null = null;
+      if (rawSignup) {
+        screensFromSignup = JSON.parse(rawSignup);
+      } else if (rawOwner) {
+        const parsed = JSON.parse(rawOwner);
+        if (parsed && parsed.screens) screensFromSignup = parsed.screens;
+      }
+      if (Array.isArray(screensFromSignup) && screensFromSignup.length > 0) {
+        const first = screensFromSignup[0];
+        const numRows = parseInt(first?.rows || '');
+        const numCols = parseInt(first?.columns || '');
+        const aisleCols: number[] = (first?.aisleColumns || '')
+          .split(',')
+          .map((v: string) => parseInt(v.trim(), 10))
+          .filter((n: number) => !isNaN(n))
+          .sort((a: number, b: number) => a - b);
+        const cls = (first?.seatClasses || []) as Array<{ label: string; price: string }>;
+        setSeatConfig(prev => {
+          const baseRows = !isNaN(numRows) ? numRows : prev.numRows;
+          const baseCols = !isNaN(numCols) ? numCols : prev.numCols;
+          const baseAisles = aisleCols.length ? aisleCols : prev.aisleColumns;
+          const nextRules = prev.seatClassRules.map(r => {
+            const match = cls.find(c => c.label.toLowerCase() === r.className.toLowerCase());
+            return {
+              ...r,
+              price: match ? parseInt(match.price || '0', 10) || r.price : r.price,
+              layout: { numRows: baseRows, numCols: baseCols, aisleColumns: baseAisles },
+            } as any;
+          });
+          setAisleInput(baseAisles.join(', '));
+          return { ...prev, numRows: baseRows, numCols: baseCols, aisleColumns: baseAisles, seatClassRules: nextRules };
+        });
+      }
+    } catch {}
   }, []);
 
   const getStatusColor = (status: string) => {
@@ -209,10 +262,13 @@ const ScreenManagement: React.FC = () => {
                 <input
                   type="text"
                   placeholder="e.g., 5, 9"
-                  value={seatConfig.aisleColumns.join(', ')}
+                  value={aisleInput}
                   onChange={(e) => handleAislesChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-red"
+                  className={`w-full px-3 py-2 bg-brand-dark border rounded-lg text-white focus:outline-none focus:ring-2 ${aisleError ? 'border-red-500 focus:ring-red-500' : 'border-brand-dark/30 focus:ring-brand-red'}`}
                 />
+                {aisleError && (
+                  <p className="mt-1 text-xs text-red-400">Please include a comma between aisle columns, e.g., 5, 9</p>
+                )}
               </div>
 
               <div className="pt-2">
@@ -273,6 +329,36 @@ const ScreenManagement: React.FC = () => {
                             className="w-16 h-8 bg-black/30 border border-brand-dark/30 rounded"
                           />
                         </div>
+                        <div>
+                          <label className="block text-xs text-brand-light-gray mb-1">Rows for {rule.className}</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={(rule.layout?.numRows) ?? seatConfig.numRows}
+                            onChange={(e) => updateRuleLayout(idx, { numRows: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                            className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-brand-light-gray mb-1">Seats/Row for {rule.className}</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={(rule.layout?.numCols) ?? seatConfig.numCols}
+                            onChange={(e) => updateRuleLayout(idx, { numCols: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                            className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-brand-light-gray mb-1">Aisles for {rule.className} (1-based, comma separated)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g., 5, 9"
+                            value={(rule.layout?.aisleColumns ?? seatConfig.aisleColumns).join(', ')}
+                            onChange={(e) => updateRuleLayout(idx, { aisleColumns: e.target.value.split(',').map(v => parseInt(v.trim(), 10)).filter(n => !isNaN(n)).sort((a,b)=>a-b) })}
+                            className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
+                          />
+                        </div>
                       </div>
                       <div className="flex justify-end">
                         <button onClick={() => removeRule(idx)} className="text-xs text-red-400 hover:text-red-300">Remove</button>
@@ -305,6 +391,12 @@ const ScreenManagement: React.FC = () => {
                       )}
                     </div>
                   )}
+                  <div className="hidden md:flex items-center text-xs text-brand-light-gray space-x-3">
+                    <span>Total: <span className="text-white">{seatStats.total}</span></span>
+                    {Object.entries(seatStats.byClass).map(([k,v]) => (
+                      <span key={k}>{k}: <span className="text-white">{v}</span></span>
+                    ))}
+                  </div>
                 </div>
               </div>
               <SeatLayoutBuilder
@@ -313,6 +405,17 @@ const ScreenManagement: React.FC = () => {
                 maxReservableSeats={10}
                 editMode={editMode}
                 onManualLayoutChange={(ids) => setManualLayout(ids)}
+                onSeatGridChange={(grid) => {
+                  const counts: Record<string, number> = {};
+                  let total = 0;
+                  grid.forEach(row => row.forEach(cell => {
+                    if (cell.number > 0 && cell.category) {
+                      total += 1;
+                      counts[cell.category] = (counts[cell.category] || 0) + 1;
+                    }
+                  }));
+                  setSeatStats({ total, byClass: counts });
+                }}
               />
               {editMode && (
                 <div className="mt-2 text-xs text-brand-light-gray">Manual layout changes will be saved with your screen configuration.</div>
