@@ -292,6 +292,11 @@ const ScreenManagement: React.FC = () => {
                     <input type="checkbox" checked={editMode} onChange={(e) => setEditMode(e.target.checked)} />
                     <span>Edit Mode (drag & drop)</span>
                   </label>
+                  {editMode && (
+                    <div className="text-xs text-brand-light-gray hidden md:block">
+                      Tip: Click empty block to add seat. Ctrl/Alt/Shift+Click on a seat to delete. Drag to move.
+                    </div>
+                  )}
                   {selectedSeatInfo && (
                     <div className="text-xs text-brand-light-gray">
                       Selected: <span className="text-white font-medium">{selectedSeatInfo.id}</span>
