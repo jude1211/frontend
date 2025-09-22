@@ -303,6 +303,19 @@ class ApiService {
     return this.makeRequest<any[]>(endpoint);
   }
 
+  async getMoviesByLocation(city: string, limit: number = 50): Promise<ApiResponse<any[]>> {
+    const qs = new URLSearchParams({ city, limit: String(limit) }).toString();
+    return this.makeRequest<any[]>(`/movies/by-location?${qs}`);
+  }
+
+  async getNowShowing(): Promise<ApiResponse<any[]>> {
+    return this.makeRequest<any[]>(`/movies/now-showing`);
+  }
+
+  async getComingSoon(): Promise<ApiResponse<any[]>> {
+    return this.makeRequest<any[]>(`/movies/coming-soon`);
+  }
+
   async getMovie(movieId: string): Promise<ApiResponse<any>> {
     return this.makeRequest<any>(`/movies/${movieId}`);
   }

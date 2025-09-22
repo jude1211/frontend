@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import BookNViewLoader from '../components/BookNViewLoader';
+import SeatLayoutBuilder, { SeatLayoutConfig, SeatClassRule, PricingTier } from '../components/SeatLayoutBuilder';
 
 interface Screen {
   id: string;
@@ -16,6 +17,54 @@ const ScreenManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [screens, setScreens] = useState<Screen[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [seatConfig, setSeatConfig] = useState<SeatLayoutConfig>({
+    numRows: 8,
+    numCols: 12,
+    aisleColumns: [5, 9],
+    seatClassRules: [
+      { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
+      { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
+      { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
+    ]
+  });
+  const [selectedSeatInfo, setSelectedSeatInfo] = useState<{ id: string; rowLabel: string; columnNumber: number; seatClass?: SeatClassRule } | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [manualLayout, setManualLayout] = useState<string[][] | null>(null);
+
+  const handleConfigNumberChange = (key: 'numRows' | 'numCols', value: number) => {
+    setSeatConfig((prev) => ({ ...prev, [key]: Math.max(1, value || 0) }));
+  };
+
+  const handleAislesChange = (value: string) => {
+    const parsed = value
+      .split(',')
+      .map((v) => parseInt(v.trim(), 10))
+      .filter((n) => !isNaN(n))
+      .sort((a, b) => a - b);
+    setSeatConfig((prev) => ({ ...prev, aisleColumns: parsed }));
+  };
+
+  const updateRule = (index: number, patch: Partial<SeatClassRule>) => {
+    setSeatConfig((prev) => {
+      const rules = prev.seatClassRules.slice();
+      rules[index] = { ...rules[index], ...patch } as SeatClassRule;
+      return { ...prev, seatClassRules: rules };
+    });
+  };
+
+  const addRule = () => {
+    setSeatConfig((prev) => ({
+      ...prev,
+      seatClassRules: prev.seatClassRules.concat({ rows: 'A', className: 'New Class', price: 0, tier: 'Base', color: '#64748b' })
+    }));
+  };
+
+  const removeRule = (index: number) => {
+    setSeatConfig((prev) => ({
+      ...prev,
+      seatClassRules: prev.seatClassRules.filter((_, i) => i !== index)
+    }));
+  };
 
   useEffect(() => {
     // Simulate loading screens
@@ -126,6 +175,146 @@ const ScreenManagement: React.FC = () => {
       </div>
 
       <div className="container mx-auto px-6 py-8">
+        {/* Dynamic Seat Layout Configurator */}
+        <div className="bg-brand-gray rounded-2xl border border-brand-dark/40 shadow-lg mb-8">
+          <div className="p-6 border-b border-brand-dark/30">
+            <h2 className="text-xl font-bold text-white">Seat Layout Configurator</h2>
+            <p className="text-brand-light-gray text-sm">Configure rows, columns, aisles and pricing tiers. Preview updates live.</p>
+          </div>
+          <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Controls */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-brand-light-gray mb-1">Number of Rows</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={seatConfig.numRows}
+                  onChange={(e) => handleConfigNumberChange('numRows', parseInt(e.target.value, 10))}
+                  className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-red"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-brand-light-gray mb-1">Seats Per Row (excluding aisles)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={seatConfig.numCols}
+                  onChange={(e) => handleConfigNumberChange('numCols', parseInt(e.target.value, 10))}
+                  className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-red"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-brand-light-gray mb-1">Aisle Columns (1-based, comma separated)</label>
+                <input
+                  type="text"
+                  placeholder="e.g., 5, 9"
+                  value={seatConfig.aisleColumns.join(', ')}
+                  onChange={(e) => handleAislesChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-red"
+                />
+              </div>
+
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm text-white">Seat Classes & Pricing</label>
+                  <button onClick={addRule} className="text-xs bg-brand-red text-white px-2 py-1 rounded">Add Class</button>
+                </div>
+                <div className="space-y-3">
+                  {seatConfig.seatClassRules.map((rule, idx) => (
+                    <div key={idx} className="bg-brand-dark rounded-lg border border-brand-dark/30 p-3 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs text-brand-light-gray mb-1">Rows (e.g., A-C, D, G-J)</label>
+                          <input
+                            type="text"
+                            value={rule.rows}
+                            onChange={(e) => updateRule(idx, { rows: e.target.value })}
+                            className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-brand-light-gray mb-1">Class Name</label>
+                          <input
+                            type="text"
+                            value={rule.className}
+                            onChange={(e) => updateRule(idx, { className: e.target.value })}
+                            className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-brand-light-gray mb-1">Price (₹)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={rule.price}
+                            onChange={(e) => updateRule(idx, { price: parseInt(e.target.value, 10) || 0 })}
+                            className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-brand-light-gray mb-1">Tier</label>
+                          <select
+                            value={rule.tier}
+                            onChange={(e) => updateRule(idx, { tier: e.target.value as PricingTier })}
+                            className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
+                          >
+                            <option value="Base">Base</option>
+                            <option value="Premium">Premium</option>
+                            <option value="VIP">VIP</option>
+                          </select>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-brand-light-gray mb-1">Color</label>
+                          <input
+                            type="color"
+                            value={rule.color}
+                            onChange={(e) => updateRule(idx, { color: e.target.value })}
+                            className="w-16 h-8 bg-black/30 border border-brand-dark/30 rounded"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <button onClick={() => removeRule(idx)} className="text-xs text-red-400 hover:text-red-300">Remove</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Live Preview */}
+            <div className="lg:col-span-2">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-white font-semibold">Live Seating Preview</h3>
+                <div className="flex items-center space-x-3">
+                  <label className="flex items-center space-x-2 text-xs text-brand-light-gray">
+                    <input type="checkbox" checked={editMode} onChange={(e) => setEditMode(e.target.checked)} />
+                    <span>Edit Mode (drag & drop)</span>
+                  </label>
+                  {selectedSeatInfo && (
+                    <div className="text-xs text-brand-light-gray">
+                      Selected: <span className="text-white font-medium">{selectedSeatInfo.id}</span>
+                      {selectedSeatInfo.seatClass && (
+                        <span> · {selectedSeatInfo.seatClass.className} · ₹{selectedSeatInfo.seatClass.price} · {selectedSeatInfo.seatClass.tier}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <SeatLayoutBuilder
+                config={seatConfig}
+                onSeatClick={(id, meta) => setSelectedSeatInfo({ id, ...meta })}
+                maxReservableSeats={10}
+                editMode={editMode}
+                onManualLayoutChange={(ids) => setManualLayout(ids)}
+              />
+              {editMode && (
+                <div className="mt-2 text-xs text-brand-light-gray">Manual layout changes will be saved with your screen configuration.</div>
+              )}
+            </div>
+          </div>
+        </div>
         {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-brand-gray rounded-2xl p-6 border border-brand-dark/40 shadow-lg">

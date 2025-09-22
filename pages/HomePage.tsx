@@ -1,18 +1,66 @@
 
 import React, { useState, useEffect } from 'react';
-import { MOVIES } from '../constants';
 import MovieCard from '../components/MovieCard';
 import { useAppContext } from '../context/AppContext';
+import { apiService } from '../services/api';
 
 const HomePage: React.FC = () => {
   const [currentBanner, setCurrentBanner] = useState(0);
   const { city } = useAppContext();
+  const [isLoading, setIsLoading] = useState(false);
+  const [movies, setMovies] = useState<any[]>([]);
+  const [allMovies, setAllMovies] = useState<any[]>([]);
+  const [comingSoon, setComingSoon] = useState<any[]>([]);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentBanner((prev) => (prev + 1) % MOVIES.length);
+      setCurrentBanner((prev) => (prev + 1) % Math.max(movies.length, 1));
     }, 5000);
     return () => clearInterval(timer);
+  }, [movies.length]);
+
+  useEffect(() => {
+    const fetchByLocation = async () => {
+      try {
+        setIsLoading(true);
+        // Fetch all movies once if not cached
+        if (!allMovies.length) {
+          const all = await apiService.getNowShowing();
+          if (all.success && all.data) setAllMovies(all.data);
+        }
+
+        // Fetch location annotations
+        const res = await apiService.getMoviesByLocation(city || '');
+        if (res.success && res.data) {
+          // merge by _id to keep a stable movie list while adding location info
+          const byId: Record<string, any> = {};
+          res.data.forEach((m: any) => { byId[m._id] = m; });
+          const base = allMovies.length ? allMovies : res.data;
+          const merged = base.map((m: any) => ({ ...m, ...(byId[m._id] || {}) }));
+          setMovies(merged);
+        } else {
+          setMovies(allMovies);
+        }
+      } catch {
+        setMovies(allMovies);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    if (city) fetchByLocation();
+  }, [city]);
+
+  useEffect(() => {
+    const fetchComing = async () => {
+      try {
+        const res = await apiService.getComingSoon();
+        if (res.success && res.data) setComingSoon(res.data);
+        else setComingSoon([]);
+      } catch {
+        setComingSoon([]);
+      }
+    };
+    fetchComing();
   }, []);
 
   const handleContactClick = () => {
@@ -23,21 +71,23 @@ const HomePage: React.FC = () => {
     <div className="space-y-16">
       {/* Hero Section - Enhanced Banner Carousel */}
       <div className="relative w-full h-64 md:h-[500px] rounded-2xl overflow-hidden shadow-2xl">
-        {MOVIES.map((movie, index) => (
+          {movies.slice(0, 5).map((movie, index) => (
           <div
-            key={movie.id}
+            key={movie._id || index}
             className={`absolute inset-0 transition-all duration-1000 ${index === currentBanner ? 'opacity-100 scale-100' : 'opacity-0 scale-105'}`}
           >
-            <img src={movie.bannerUrl} alt={movie.title} className="w-full h-full object-cover" />
+            <img src={movie.posterUrl} alt={movie.title} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
             <div className="absolute bottom-0 left-0 p-8 md:p-12">
               <div className="max-w-2xl">
                 <h2 className="text-4xl md:text-6xl font-bold text-white mb-4 drop-shadow-2xl">{movie.title}</h2>
                 <p className="text-lg md:text-xl text-gray-300 mb-6 drop-shadow-lg">{movie.genre}</p>
                 <div className="flex items-center space-x-4 mb-6">
-                  <span className="bg-brand-red text-white px-4 py-2 rounded-full text-sm font-semibold">
-                    ⭐ {movie.rating}/10
-                  </span>
+                  {movie.rating && (
+                    <span className="bg-brand-red text-white px-4 py-2 rounded-full text-sm font-semibold">
+                      ⭐ {movie.rating}/10
+                    </span>
+                  )}
                   <span className="text-white bg-black/30 px-4 py-2 rounded-full text-sm">
                     {movie.duration}
                   </span>
@@ -50,7 +100,7 @@ const HomePage: React.FC = () => {
           </div>
         ))}
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex space-x-3">
-            {MOVIES.map((_, index) => (
+            {movies.slice(0, 5).map((_: any, index: number) => (
             <button 
               key={index} 
               onClick={() => setCurrentBanner(index)} 
@@ -68,20 +118,46 @@ const HomePage: React.FC = () => {
             <div className="flex items-center space-x-2">
               <span className="text-brand-red font-semibold">In {city}</span>
               <span className="text-gray-400">•</span>
-              <span className="text-gray-400 text-sm">{MOVIES.length} movies available</span>
+              <span className="text-gray-400 text-sm">{movies.length} movies available</span>
             </div>
           </div>
           <button className="text-brand-red hover:text-red-400 transition-colors font-semibold">
             View All →
           </button>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {MOVIES.map((movie) => (
-            <div key={movie.id} className="group">
-              <MovieCard movie={movie} />
-            </div>
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="text-center text-gray-400 py-12">Loading movies…</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+          {movies.map((movie) => (
+              <div key={movie._id} className="group">
+                <MovieCard movie={{
+                  id: movie._id,
+                  title: movie.title,
+                  posterUrl: movie.posterUrl,
+                  genre: movie.genre,
+                  rating: movie.rating || 0,
+                  duration: movie.duration
+                }} />
+              <div className="mt-2 text-xs text-gray-400">
+                {movie._inCity ? (
+                  <>
+                    <div>{movie.theatreOwner?.theatreName}</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {(movie.showtimes || []).slice(0,3).map((t: string, i: number) => (
+                        <span key={i} className="bg-brand-dark text-white px-2 py-0.5 rounded">{t}</span>
+                      ))}
+                    </div>
+                    <button className="mt-2 w-full bg-brand-red text-white py-1.5 rounded hover:bg-red-600 transition-colors">Book</button>
+                  </>
+                ) : (
+                  <div className="text-gray-500 italic">No shows available in this location.</div>
+                )}
+              </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="text-center mt-12">
           <button className="bg-gradient-to-r from-brand-red to-red-600 text-white px-8 py-4 rounded-lg font-bold hover:from-red-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 shadow-lg">
             Load More Movies →
@@ -101,8 +177,8 @@ const HomePage: React.FC = () => {
           </button>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {MOVIES.slice(0, 4).map((movie) => (
-            <div key={`coming-${movie.id}`} className="relative group">
+          {comingSoon.slice(0, 8).map((movie) => (
+            <div key={`coming-${movie._id}`} className="relative group">
               <div className="relative overflow-hidden rounded-xl">
                 <img src={movie.posterUrl} alt={movie.title} className="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-500" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-center">
@@ -115,7 +191,7 @@ const HomePage: React.FC = () => {
                 </div>
                 <div className="absolute top-4 right-4">
                   <div className="bg-black/50 text-white px-2 py-1 rounded text-xs">
-                    ⭐ {movie.rating}
+                    ⭐ {movie.rating || 0}
                   </div>
                 </div>
               </div>
