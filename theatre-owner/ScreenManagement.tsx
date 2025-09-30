@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { seatService } from '../services/seatService';
 import BookNViewLoader from '../components/BookNViewLoader';
 import SeatLayoutBuilder, { SeatLayoutConfig, SeatClassRule, PricingTier } from '../components/SeatLayoutBuilder';
 
@@ -16,7 +17,7 @@ interface Screen {
 const ScreenManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [screens, setScreens] = useState<Screen[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [seatConfig, setSeatConfig] = useState<SeatLayoutConfig>({
     numRows: 8,
     numCols: 12,
@@ -82,87 +83,53 @@ const ScreenManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    // Simulate loading screens
-    setScreens([
-      {
-        id: '1',
-        name: 'Screen 1',
-        capacity: 120,
-        type: '2D',
-        status: 'active',
-        currentMovie: 'Superman',
-        nextShowtime: '7:30 PM',
-        occupancy: 85
-      },
-      {
-        id: '2',
-        name: 'Screen 2',
-        capacity: 150,
-        type: '3D',
-        status: 'active',
-        currentMovie: 'Saiyara',
-        nextShowtime: '8:00 PM',
-        occupancy: 92
-      },
-      {
-        id: '3',
-        name: 'Screen 3',
-        capacity: 200,
-        type: 'IMAX',
-        status: 'active',
-        currentMovie: 'F1: The Movie',
-        nextShowtime: '6:30 PM',
-        occupancy: 78
-      },
-      {
-        id: '4',
-        name: 'Screen 4',
-        capacity: 80,
-        type: '4DX',
-        status: 'maintenance',
-        currentMovie: 'None',
-        nextShowtime: 'N/A',
-        occupancy: 0
-      }
-    ]);
-    // Prefill from signup if available
-    try {
-      const rawSignup = localStorage.getItem('theatreOwnerSignupScreens');
-      const rawOwner = localStorage.getItem('theatreOwnerData');
-      let screensFromSignup: any[] | null = null;
-      if (rawSignup) {
-        screensFromSignup = JSON.parse(rawSignup);
-      } else if (rawOwner) {
-        const parsed = JSON.parse(rawOwner);
-        if (parsed && parsed.screens) screensFromSignup = parsed.screens;
-      }
-      if (Array.isArray(screensFromSignup) && screensFromSignup.length > 0) {
-        const first = screensFromSignup[0];
-        const numRows = parseInt(first?.rows || '');
-        const numCols = parseInt(first?.columns || '');
-        const aisleCols: number[] = (first?.aisleColumns || '')
-          .split(',')
-          .map((v: string) => parseInt(v.trim(), 10))
-          .filter((n: number) => !isNaN(n))
-          .sort((a: number, b: number) => a - b);
-        const cls = (first?.seatClasses || []) as Array<{ label: string; price: string }>;
-        setSeatConfig(prev => {
-          const baseRows = !isNaN(numRows) ? numRows : prev.numRows;
-          const baseCols = !isNaN(numCols) ? numCols : prev.numCols;
-          const baseAisles = aisleCols.length ? aisleCols : prev.aisleColumns;
-          const nextRules = prev.seatClassRules.map(r => {
-            const match = cls.find(c => c.label.toLowerCase() === r.className.toLowerCase());
-            return {
-              ...r,
-              price: match ? parseInt(match.price || '0', 10) || r.price : r.price,
-              layout: { numRows: baseRows, numCols: baseCols, aisleColumns: baseAisles },
-            } as any;
+    let isMounted = true;
+    (async () => {
+      try {
+        setIsLoading(true);
+        // Fetch saved screens from backend
+        const ownerScreens = await seatService.getOwnerScreens().catch(() => null as any);
+        if (!isMounted) return;
+        if (ownerScreens && Array.isArray(ownerScreens.screens) && ownerScreens.screens.length > 0) {
+          // Populate seat grid config from first screen for builder preview; list screens in cards
+          const cards = ownerScreens.screens.map((s: any) => ({
+            id: String(s.screenNumber),
+            name: `Screen ${s.screenNumber}`,
+            capacity: parseInt(String(s.seatingCapacity || '0'), 10) || 0,
+            type: '2D' as const,
+            status: 'active' as const,
+            currentMovie: '—',
+            nextShowtime: '—',
+            occupancy: 0
+          }));
+          setScreens(cards);
+
+          const first = ownerScreens.screens[0];
+          const baseRows = typeof first.rows === 'number' ? first.rows : parseInt(String(first.rows || ''), 10);
+          const baseCols = typeof first.columns === 'number' ? first.columns : parseInt(String(first.columns || ''), 10);
+          const baseAisles: number[] = Array.isArray(first.aisleColumns) ? first.aisleColumns : [];
+          const cls = (first.seatClasses || []) as Array<{ label: string; price: string }>;
+          setSeatConfig(prev => {
+            const rows = !isNaN(baseRows as any) && baseRows ? (baseRows as number) : prev.numRows;
+            const cols = !isNaN(baseCols as any) && baseCols ? (baseCols as number) : prev.numCols;
+            const aisles = baseAisles.length ? baseAisles : prev.aisleColumns;
+            const nextRules = prev.seatClassRules.map(r => {
+              const match = cls.find(c => c.label?.toLowerCase() === r.className.toLowerCase());
+              return {
+                ...r,
+                price: match ? parseInt(String(match.price || '0'), 10) || r.price : r.price,
+                layout: { numRows: rows, numCols: cols, aisleColumns: aisles },
+              } as any;
+            });
+            setAisleInput(aisles.join(', '));
+            return { ...prev, numRows: rows, numCols: cols, aisleColumns: aisles, seatClassRules: nextRules };
           });
-          setAisleInput(baseAisles.join(', '));
-          return { ...prev, numRows: baseRows, numCols: baseCols, aisleColumns: baseAisles, seatClassRules: nextRules };
-        });
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-    } catch {}
+    })();
+    return () => { isMounted = false; };
   }, []);
 
   const getStatusColor = (status: string) => {
@@ -243,7 +210,7 @@ const ScreenManagement: React.FC = () => {
                   type="number"
                   min={1}
                   value={seatConfig.numRows}
-                  onChange={(e) => handleConfigNumberChange('numRows', parseInt(e.target.value, 10))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleConfigNumberChange('numRows', parseInt(e.target.value, 10))}
                   className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-red"
                 />
               </div>
@@ -253,7 +220,7 @@ const ScreenManagement: React.FC = () => {
                   type="number"
                   min={1}
                   value={seatConfig.numCols}
-                  onChange={(e) => handleConfigNumberChange('numCols', parseInt(e.target.value, 10))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleConfigNumberChange('numCols', parseInt(e.target.value, 10))}
                   className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-red"
                 />
               </div>
@@ -263,7 +230,7 @@ const ScreenManagement: React.FC = () => {
                   type="text"
                   placeholder="e.g., 5, 9"
                   value={aisleInput}
-                  onChange={(e) => handleAislesChange(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleAislesChange(e.target.value)}
                   className={`w-full px-3 py-2 bg-brand-dark border rounded-lg text-white focus:outline-none focus:ring-2 ${aisleError ? 'border-red-500 focus:ring-red-500' : 'border-brand-dark/30 focus:ring-brand-red'}`}
                 />
                 {aisleError && (
@@ -285,7 +252,7 @@ const ScreenManagement: React.FC = () => {
                           <input
                             type="text"
                             value={rule.rows}
-                            onChange={(e) => updateRule(idx, { rows: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateRule(idx, { rows: e.target.value })}
                             className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
                           />
                         </div>
@@ -294,7 +261,7 @@ const ScreenManagement: React.FC = () => {
                           <input
                             type="text"
                             value={rule.className}
-                            onChange={(e) => updateRule(idx, { className: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateRule(idx, { className: e.target.value })}
                             className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
                           />
                         </div>
@@ -304,7 +271,7 @@ const ScreenManagement: React.FC = () => {
                             type="number"
                             min={0}
                             value={rule.price}
-                            onChange={(e) => updateRule(idx, { price: parseInt(e.target.value, 10) || 0 })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateRule(idx, { price: parseInt(e.target.value, 10) || 0 })}
                             className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
                           />
                         </div>
@@ -312,7 +279,7 @@ const ScreenManagement: React.FC = () => {
                           <label className="block text-xs text-brand-light-gray mb-1">Tier</label>
                           <select
                             value={rule.tier}
-                            onChange={(e) => updateRule(idx, { tier: e.target.value as PricingTier })}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateRule(idx, { tier: e.target.value as PricingTier })}
                             className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
                           >
                             <option value="Base">Base</option>
@@ -325,7 +292,7 @@ const ScreenManagement: React.FC = () => {
                           <input
                             type="color"
                             value={rule.color}
-                            onChange={(e) => updateRule(idx, { color: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateRule(idx, { color: e.target.value })}
                             className="w-16 h-8 bg-black/30 border border-brand-dark/30 rounded"
                           />
                         </div>
@@ -335,7 +302,7 @@ const ScreenManagement: React.FC = () => {
                             type="number"
                             min={1}
                             value={(rule.layout?.numRows) ?? seatConfig.numRows}
-                            onChange={(e) => updateRuleLayout(idx, { numRows: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateRuleLayout(idx, { numRows: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                             className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
                           />
                         </div>
@@ -345,7 +312,7 @@ const ScreenManagement: React.FC = () => {
                             type="number"
                             min={1}
                             value={(rule.layout?.numCols) ?? seatConfig.numCols}
-                            onChange={(e) => updateRuleLayout(idx, { numCols: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateRuleLayout(idx, { numCols: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                             className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
                           />
                         </div>
@@ -355,7 +322,7 @@ const ScreenManagement: React.FC = () => {
                             type="text"
                             placeholder="e.g., 5, 9"
                             value={(rule.layout?.aisleColumns ?? seatConfig.aisleColumns).join(', ')}
-                            onChange={(e) => updateRuleLayout(idx, { aisleColumns: e.target.value.split(',').map(v => parseInt(v.trim(), 10)).filter(n => !isNaN(n)).sort((a,b)=>a-b) })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateRuleLayout(idx, { aisleColumns: e.target.value.split(',').map((v: string) => parseInt(v.trim(), 10)).filter((n: number) => !isNaN(n)).sort((a: number,b: number)=>a-b) })}
                             className="w-full px-2 py-1.5 bg-black/30 border border-brand-dark/30 rounded text-white text-sm"
                           />
                         </div>
@@ -375,7 +342,7 @@ const ScreenManagement: React.FC = () => {
                 <h3 className="text-white font-semibold">Live Seating Preview</h3>
                 <div className="flex items-center space-x-3">
                   <label className="flex items-center space-x-2 text-xs text-brand-light-gray">
-                    <input type="checkbox" checked={editMode} onChange={(e) => setEditMode(e.target.checked)} />
+                    <input type="checkbox" checked={editMode} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditMode(e.target.checked)} />
                     <span>Edit Mode (drag & drop)</span>
                   </label>
                   {editMode && (
