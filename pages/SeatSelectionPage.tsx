@@ -1,41 +1,9 @@
 
-import React, { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useCallback, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Seat, SeatStatus } from '../types';
 import { useAppContext } from '../context/AppContext';
-
-// Mock seat layout generator
-const generateSeats = (): Seat[][] => {
-  const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-  const seats: Seat[][] = [];
-  let idCounter = 1;
-  rows.forEach(row => {
-    const rowSeats: Seat[] = [];
-    for (let i = 1; i <= 14; i++) {
-      let status = SeatStatus.Available;
-      if (Math.random() < 0.2) status = SeatStatus.Booked;
-      if (['I', 'J'].includes(row)) status = SeatStatus.Premium;
-
-      let price = 12;
-      if (status === SeatStatus.Premium) price = 20;
-
-      // Add gaps for aisles
-      if (i === 4 || i === 11) {
-          rowSeats.push({id: `gap-${row}-${i}`, row: '', number: 0, status: SeatStatus.Available, price: 0});
-      }
-
-      rowSeats.push({
-        id: (idCounter++).toString(),
-        row,
-        number: i,
-        status: status,
-        price,
-      });
-    }
-    seats.push(rowSeats);
-  });
-  return seats;
-};
+import { apiService } from '../services/api';
 
 const SeatComponent: React.FC<{ seat: Seat; onSelect: (seat: Seat) => void; isSelected: boolean }> = ({ seat, onSelect, isSelected }) => {
   if (seat.row === '') return <div className="w-8 h-8"></div>; // Aisle
@@ -62,11 +30,68 @@ const SeatComponent: React.FC<{ seat: Seat; onSelect: (seat: Seat) => void; isSe
 };
 
 
+
 const SeatSelectionPage: React.FC = () => {
   const navigate = useNavigate();
+  const { movieId, screenId, bookingDate, time } = useParams<{ movieId: string; screenId: string; bookingDate: string; time: string }>();
   const { selectedSeats, setSelectedSeats, totalSeatPrice } = useAppContext();
-  const [seatsLayout] = useState(generateSeats());
+  const [bookingConfirming, setBookingConfirming] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const [seatsLayout, setSeatsLayout] = useState<Seat[][]>([]);
+  const [rawSeats, setRawSeats] = useState<Array<any>>([]); // exact persisted seats with x,y
+  const [layoutBounds, setLayoutBounds] = useState<{ width:number; height:number }>({ width: 0, height: 0 });
   const [is3DPreview, setIs3DPreview] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchLayout = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        if (!screenId || !bookingDate || !time) {
+          setError('Showtime not found.');
+          setLoading(false);
+          return;
+        }
+        // Fetch live seat layout for this show (uses persisted ScreenLayout seats)
+        const layoutRes = await apiService.getLiveSeatLayout(screenId, bookingDate, time);
+        if (layoutRes.success && Array.isArray(layoutRes.data?.seats)) {
+          // Persist exact seats with positions
+          const incoming = (layoutRes.data.seats || []).filter((s:any)=> s?.isActive !== false);
+          setRawSeats(incoming);
+
+          // Also keep grouped representation for fallback/labels
+          const seatsByRow: Record<string, Seat[]> = {};
+          incoming.forEach((seat: any) => {
+            const row = seat.rowLabel;
+            if (!seatsByRow[row]) seatsByRow[row] = [];
+            seatsByRow[row].push({
+              id: `${row}-${seat.number}`,
+              row,
+              number: seat.number,
+              status: seat.liveStatus === 'booked' ? SeatStatus.Booked : SeatStatus.Available,
+              price: seat.price
+            });
+          });
+          setSeatsLayout(Object.values(seatsByRow));
+
+          // Compute layout bounds based on X/Y + seat size
+          const seatSize = 32; // px (w-8 h-8)
+          const maxX = incoming.reduce((m:number, s:any)=> Math.max(m, (s.x ?? 0)), 0);
+          const maxY = incoming.reduce((m:number, s:any)=> Math.max(m, (s.y ?? 0)), 0);
+          setLayoutBounds({ width: maxX + seatSize + 40, height: maxY + seatSize + 80 });
+        } else {
+          setError('Failed to fetch seat layout.');
+        }
+      } catch {
+        setError('Failed to fetch seat layout.');
+      }
+      setLoading(false);
+    };
+    fetchLayout();
+  }, [screenId, bookingDate, time]);
 
   const handleSeatSelect = useCallback((seat: Seat) => {
     setSelectedSeats(prev => {
@@ -79,6 +104,62 @@ const SeatSelectionPage: React.FC = () => {
     });
   }, [setSelectedSeats]);
 
+  const handleConfirmBooking = useCallback(async () => {
+    if (!screenId || !bookingDate || !time) return;
+    if (selectedSeats.length === 0) return;
+    // Require auth token
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setBookingError('Please login to continue booking.');
+      navigate('/login');
+      return;
+    }
+    setBookingError(null);
+    setBookingConfirming(true);
+    try {
+      // Prepare seat payload in persisted form
+      const seatsPayload = selectedSeats.map(s => {
+        // find raw seat for price
+        const raw = rawSeats.find((rs:any) => String(rs.rowLabel) === String(s.row) && Number(rs.number) === Number(s.number));
+        return { rowLabel: s.row, number: s.number, price: Number(raw?.price || s.price || 0) };
+      });
+      const res = await apiService.confirmSeatBooking(screenId, bookingDate, time, seatsPayload);
+      if (res.success) {
+        // Refresh live layout immediately
+        try {
+          const layoutRes = await apiService.getLiveSeatLayout(screenId, bookingDate, time);
+          if (layoutRes.success && Array.isArray(layoutRes.data?.seats)) {
+            const incoming = (layoutRes.data.seats || []).filter((s:any)=> s?.isActive !== false);
+            setRawSeats(incoming);
+            const seatSize = 32;
+            const maxX = incoming.reduce((m:number, s:any)=> Math.max(m, (s.x ?? 0)), 0);
+            const maxY = incoming.reduce((m:number, s:any)=> Math.max(m, (s.y ?? 0)), 0);
+            setLayoutBounds({ width: maxX + seatSize + 40, height: maxY + seatSize + 80 });
+          }
+        } catch {}
+        // Clear selections and show success (redirect to summary could be implemented here)
+        setSelectedSeats([]);
+        alert(`Booking Confirmed!\nBooking ID: ${res.data?.bookingId}\nTotal: ₹${(res.data?.totalAmount || 0).toLocaleString('en-IN')}`);
+      } else {
+        if ((res as any).data?.conflicts?.length) {
+          setBookingError(`Seats no longer available: ${(res as any).data.conflicts.join(', ')}`);
+          // refresh layout
+          const layoutRes = await apiService.getLiveSeatLayout(screenId, bookingDate, time);
+          if (layoutRes.success && Array.isArray(layoutRes.data?.seats)) setRawSeats((layoutRes.data.seats || []).filter((s:any)=> s?.isActive !== false));
+        } else {
+          setBookingError(res.error || 'Failed to confirm booking');
+        }
+      }
+    } catch (e:any) {
+      setBookingError(e?.message || 'Failed to confirm booking');
+    } finally {
+      setBookingConfirming(false);
+    }
+  }, [screenId, bookingDate, time, selectedSeats, rawSeats, setSelectedSeats]);
+
+  if (loading) return <div className="text-center text-2xl text-gray-400">Loading seat layout…</div>;
+  if (error) return <div className="text-center text-2xl text-red-400">{error}</div>;
+
   return (
     <div className="flex flex-col lg:flex-row gap-8">
       <div className="flex-grow animate-fade-in-up">
@@ -90,22 +171,28 @@ const SeatSelectionPage: React.FC = () => {
               </div>
           </div>
 
-          <div className="space-y-2 flex flex-col items-center">
-            {seatsLayout.map((row, rowIndex) => (
-              <div key={rowIndex} className="flex items-center gap-2">
-                 <div className="w-8 text-center font-bold text-gray-400">{row[0].row}</div>
-                 <div className="flex gap-2">
-                    {row.map(seat => (
-                      <SeatComponent
-                        key={seat.id}
-                        seat={seat}
-                        onSelect={() => handleSeatSelect(seat)}
-                        isSelected={selectedSeats.some(s => s.id === seat.id)}
-                      />
-                    ))}
-                 </div>
-              </div>
-            ))}
+          {/* Exact persisted layout (uses persisted X/Y and seat activation) */}
+          <div className="relative mx-auto" style={{ width: `${layoutBounds.width}px`, height: `${layoutBounds.height}px` }}>
+            {rawSeats.map((s:any) => {
+              const id = `${s.rowLabel}-${s.number}`;
+              const isBooked = s.liveStatus === 'booked';
+              const isSelected = selectedSeats.some(x => x.id === id);
+              // Build Seat conforming object for handler
+              const seatObj: Seat = { id, row: s.rowLabel, number: s.number, status: isBooked ? SeatStatus.Booked : SeatStatus.Available, price: s.price };
+              const baseColor = isBooked ? 'bg-gray-600 cursor-not-allowed' : (isSelected ? 'bg-green-500' : 'bg-gray-300 hover:bg-gray-200');
+              return (
+                <button
+                  key={id}
+                  onClick={() => !isBooked && handleSeatSelect(seatObj)}
+                  disabled={isBooked}
+                  className={`absolute w-8 h-8 rounded-t-lg text-black text-xs font-semibold flex items-center justify-center transition-all duration-200 ${isSelected ? 'scale-110' : 'scale-100'} ${baseColor}`}
+                  style={{ left: `${s.x || 0}px`, top: `${s.y || 0}px` }}
+                  title={`${s.rowLabel}${s.number}`}
+                >
+                  {s.number}
+                </button>
+              );
+            })}
           </div>
           
           <div className="flex justify-center space-x-6 mt-8">
@@ -133,7 +220,7 @@ const SeatSelectionPage: React.FC = () => {
           <h2 className="text-2xl font-bold mb-4 text-white">Booking Summary</h2>
           <div className="space-y-2">
             <div className="flex justify-between"><span className="text-gray-400">Seats ({selectedSeats.length}):</span> <span>{selectedSeats.map(s => `${s.row}${s.number}`).join(', ')}</span></div>
-            <div className="flex justify-between font-bold text-lg"><span className="text-white">Subtotal:</span> <span className="text-brand-red">${totalSeatPrice.toFixed(2)}</span></div>
+            <div className="flex justify-between font-bold text-lg"><span className="text-white">Subtotal:</span> <span className="text-brand-red">₹{Number(totalSeatPrice).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
           </div>
           <p className="text-xs text-gray-500 mt-2">Dynamic Pricing Applied. Prices may vary.</p>
           <hr className="my-4 border-gray-600"/>
@@ -142,8 +229,9 @@ const SeatSelectionPage: React.FC = () => {
             <p className="text-gray-400 mb-4">Add snacks to your order.</p>
             <button onClick={() => navigate('/snacks')} className="w-full bg-yellow-500 text-black py-3 rounded-md font-bold hover:bg-yellow-400 transition-colors">Order Snacks</button>
           </div>
-          <button onClick={() => navigate('/snacks')} disabled={selectedSeats.length === 0} className="w-full mt-6 bg-brand-red text-white py-3 rounded-md font-bold hover:bg-red-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">
-            {selectedSeats.length > 0 ? `Pay $${totalSeatPrice.toFixed(2)}` : 'Select Seats to Proceed'}
+          {bookingError && <div className="mt-3 text-sm text-red-400">{bookingError}</div>}
+          <button onClick={handleConfirmBooking} disabled={selectedSeats.length === 0 || bookingConfirming} className="w-full mt-6 bg-brand-red text-white py-3 rounded-md font-bold hover:bg-red-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">
+            {bookingConfirming ? 'Processing…' : (selectedSeats.length > 0 ? `Pay ₹${Number(totalSeatPrice).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : 'Select Seats to Proceed')}
           </button>
         </div>
       </div>

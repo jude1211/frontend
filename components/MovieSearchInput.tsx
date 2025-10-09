@@ -36,6 +36,15 @@ export interface TMDBMovieDetails {
   vote_average: number;
   vote_count: number;
   adult: boolean;
+  videos?: {
+    results: Array<{
+      id: string;
+      key: string;
+      name: string;
+      site: string;
+      type: string;
+    }>;
+  };
 }
 
 export interface MovieSearchInputProps {
@@ -115,13 +124,11 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
   const fetchMovieDetails = async (movieId: number): Promise<TMDBMovieDetails | null> => {
     try {
       const response = await fetch(
-        `${TMDB_BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=credits`
+        `${TMDB_BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=credits,videos`
       );
-      
       if (!response.ok) {
         throw new Error(`TMDB API error: ${response.status}`);
       }
-
       return await response.json();
     } catch (err) {
       console.error('Movie details error:', err);

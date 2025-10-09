@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Movie } from '../types';
 
 interface MovieCardProps {
@@ -8,6 +8,7 @@ interface MovieCardProps {
 }
 
 const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
+  const navigate = useNavigate();
   return (
     <Link to={`/movie/${movie.id}`} className="group block">
       <div className="relative overflow-hidden rounded-xl bg-brand-gray hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2">
@@ -31,7 +32,7 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
             <div className="absolute bottom-0 left-0 right-0 p-4">
               <div className="flex items-center justify-between text-white">
                 <span className="text-sm font-semibold">{movie.duration}</span>
-                <button className="bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-600 transition-colors">
+                <button onClick={(e)=>{ e.preventDefault(); navigate(`/landing?movie=${encodeURIComponent(String(movie.id))}`); }} className="bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-600 transition-colors">
                   Book Now
                 </button>
               </div>
@@ -79,10 +80,26 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
           </div>
         </div>
 
-        {/* Quick action ribbon */}
-        <div className="absolute top-0 left-0 bg-brand-red text-white px-3 py-1 text-xs font-bold rounded-br-lg">
-          Now Showing
-        </div>
+        {/* Status ribbon and badges */}
+        {movie.status === 'Now Showing' && (
+          <div className="absolute top-0 left-0 bg-brand-red text-white px-3 py-1 text-xs font-bold rounded-br-lg">
+            Now Showing
+            {movie.runtimeDays && (
+              <span className="ml-2 bg-black/40 px-2 py-0.5 rounded-full text-[10px] font-normal">Day {movie.runtimeDays}</span>
+            )}
+          </div>
+        )}
+        {movie.status === 'Coming Soon' && (
+          <div className="absolute top-0 left-0 bg-yellow-600 text-white px-3 py-1 text-xs font-bold rounded-br-lg">
+            Coming Soon
+            {movie.releaseDate && (
+              <span className="ml-2 bg-black/40 px-2 py-0.5 rounded-full text-[10px] font-normal">Releases {movie.releaseDate}</span>
+            )}
+            {movie.advanceBookingEnabled && (
+              <span className="ml-2 bg-green-600 px-2 py-0.5 rounded-full text-[10px] font-bold">Advance Booking Open</span>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );

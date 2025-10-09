@@ -27,6 +27,7 @@ interface Movie {
   };
   createdAt: string;
   updatedAt: string;
+  trailerUrl?: string;
 }
 
 interface MovieFormData {
@@ -42,6 +43,7 @@ interface MovieFormData {
   cast: string;
   language: string;
   releaseDate: string;
+  trailerUrl: string;
 }
 
 const MovieManagement: React.FC = () => {
@@ -66,14 +68,17 @@ const MovieManagement: React.FC = () => {
     director: '',
     cast: '',
     language: 'English',
-    releaseDate: ''
+    releaseDate: '',
+    trailerUrl: ''
   });
   const [errors, setErrors] = useState<Partial<MovieFormData>>({});
   const [selectedMovie, setSelectedMovie] = useState<TMDBMovieDetails | null>(null);
+  const [tmdbId, setTmdbId] = useState<number | null>(null);
 
   // Auto-fill form with TMDB movie data
   const handleMovieSelect = (movie: TMDBMovieDetails) => {
     setSelectedMovie(movie);
+    setTmdbId(movie.id);
 
     // Extract genres
     const genres = movie.genres.map(g => g.name).join('/');
@@ -94,7 +99,15 @@ const MovieManagement: React.FC = () => {
     // Suggested format (owner can override)
     const suggestedFormat = (movie.vote_average > 7.5 ? '3D' : '2D') as '2D' | '3D';
 
-    // Update form data without overriding owner selections for Format/Language/Status
+    // Find YouTube trailer URL from TMDB videos if available
+    let trailerUrl = '';
+    if (movie.videos && Array.isArray(movie.videos.results)) {
+      const trailer = movie.videos.results.find(v => v.type === 'Trailer' && v.site === 'YouTube');
+      if (trailer) {
+        trailerUrl = `https://www.youtube.com/watch?v=${trailer.key}`;
+      }
+    }
+
     setFormData(prev => ({
       ...prev,
       title: movie.title,
@@ -108,7 +121,8 @@ const MovieManagement: React.FC = () => {
       director: director || prev.director,
       cast: cast || prev.cast,
       releaseDate: releaseDate || prev.releaseDate,
-      description: movie.overview || prev.description
+      description: movie.overview || prev.description,
+      trailerUrl: trailerUrl || prev.trailerUrl
     }));
 
     // Don’t force the suggested format if owner has already chosen; if empty, use suggestion
@@ -117,7 +131,6 @@ const MovieManagement: React.FC = () => {
       format: (prev.format || suggestedFormat) as '2D' | '3D'
     }));
 
-    // Clear any existing errors
     setErrors({});
   };
 
@@ -257,7 +270,9 @@ const MovieManagement: React.FC = () => {
         cast: formData.cast ? formData.cast.split(',').map(c => c.trim()) : [],
         language: formData.language,
         releaseDate: formData.releaseDate,
-        format: formData.format
+        format: formData.format,
+        trailerUrl: formData.trailerUrl,
+        tmdbId: tmdbId
       };
 
       if (isEditMode && editingMovie) {
@@ -299,9 +314,11 @@ const MovieManagement: React.FC = () => {
         director: '',
         cast: '',
         language: 'English',
-        releaseDate: ''
+        releaseDate: '',
+        trailerUrl: ''
       });
       setSelectedMovie(null);
+      setTmdbId(null);
       setErrors({});
 
     } catch (error) {
@@ -330,7 +347,8 @@ const MovieManagement: React.FC = () => {
       director: '',
       cast: '',
       language: 'English',
-      releaseDate: ''
+      releaseDate: '',
+      trailerUrl: ''
     });
     setErrors({});
   };
@@ -350,7 +368,8 @@ const MovieManagement: React.FC = () => {
       director: movie.director || '',
       cast: movie.cast ? movie.cast.join(', ') : '',
       language: movie.language || 'English',
-      releaseDate: movie.releaseDate || ''
+      releaseDate: movie.releaseDate || '',
+      trailerUrl: movie.trailerUrl || ''
     });
     setShowAddModal(true);
   };
@@ -537,12 +556,12 @@ const MovieManagement: React.FC = () => {
                     Showtimes:
                   </p>
                   <div className="flex flex-wrap gap-1">
-                    {movie.showtimes.slice(0, 3).map((time, index) => (
+                    {(movie.showtimes || []).slice(0, 3).map((time, index) => (
                       <span key={index} className="bg-gradient-to-r from-brand-red to-red-600 text-white px-2 py-1 rounded text-xs font-medium">
                         {time}
                       </span>
                     ))}
-                    {movie.showtimes.length > 3 && (
+                    {Array.isArray(movie.showtimes) && movie.showtimes.length > 3 && (
                       <span className="bg-brand-dark text-brand-light-gray px-2 py-1 rounded text-xs">
                         +{movie.showtimes.length - 3} more
                       </span>
@@ -800,6 +819,38 @@ const MovieManagement: React.FC = () => {
                       className="w-full px-4 py-3 bg-brand-dark border border-brand-dark/30 rounded-xl text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
                       placeholder="https://example.com/poster.jpg"
                     />
+                  </div>
+
+                  {/* Trailer URL */}
+                  <div className="md:col-span-2">
+                    <label htmlFor="trailerUrl" className="block text-sm font-medium text-white mb-2">
+                      Trailer URL
+                      <span className="text-brand-light-gray text-xs ml-2">(auto-filled from TMDB if available, editable)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        id="trailerUrl"
+                        name="trailerUrl"
+                        value={formData.trailerUrl}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-brand-dark border border-brand-dark/30 rounded-xl text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                      />
+                      {formData.trailerUrl && selectedMovie && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full">
+                            <i className="fas fa-check mr-1"></i>Auto-filled
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {formData.trailerUrl && (
+                      <p className="text-green-400 text-xs mt-1">
+                        <i className="fas fa-video mr-1"></i>
+                        Trailer URL ready for saving
+                      </p>
+                    )}
                   </div>
 
                   {/* Director */}

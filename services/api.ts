@@ -75,6 +75,29 @@ interface AuthResponse {
 }
 
 class ApiService {
+  // Live seat layout for a show (with availability)
+  async getLiveSeatLayout(screenId: string, bookingDate: string, showtime: string): Promise<ApiResponse<any>> {
+    return this.tryFetch<any>(`/seat-layout/${encodeURIComponent(screenId)}/${encodeURIComponent(bookingDate)}/${encodeURIComponent(showtime)}`, {
+      method: 'GET'
+    }, false);
+  }
+
+  // Confirm booking for a showtime (atomic validation + booking)
+  async confirmSeatBooking(screenId: string, bookingDate: string, showtime: string, seats: Array<{ rowLabel: string; number: number; price: number }>): Promise<ApiResponse<{ bookingId: string; totalAmount: number; currency: string }>> {
+    return this.tryFetch<{ bookingId: string; totalAmount: number; currency: string }>(`/seat-layout/${encodeURIComponent(screenId)}/${encodeURIComponent(bookingDate)}/${encodeURIComponent(showtime)}/book`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ seats })
+    }, true);
+  }
+
+  // Fetch seat layout for a show by showId
+  async getShowSeatLayout(showId: string): Promise<ApiResponse<any>> {
+    return this.tryFetch<any>(`/shows/${encodeURIComponent(showId)}/seat-layout`, { method: 'GET' }, false);
+  }
+
   private async tryFetch<T>(endpoint: string, options: RequestInit, isFormData: boolean): Promise<ApiResponse<T>> {
     let lastError: any;
     for (const base of API_BASE_CANDIDATES) {
@@ -83,10 +106,14 @@ class ApiService {
         const timeoutMs = isFormData ? 30000 : 8000;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const defaultHeaders = this.getAuthHeaders(isFormData);
+        const optionHeaders = (options.headers || {}) as HeadersInit;
+        // Merge headers so Authorization is preserved while allowing overrides like Content-Type
+        const mergedHeaders: HeadersInit = { ...(defaultHeaders as any), ...(optionHeaders as any) };
         const response = await fetch(`${base}${endpoint}`, {
-          headers: this.getAuthHeaders(isFormData),
-          signal: controller.signal,
-          ...options
+          ...options,
+          headers: mergedHeaders,
+          signal: controller.signal
         });
         clearTimeout(timeoutId);
         let data: any = null;
@@ -284,6 +311,36 @@ class ApiService {
     });
   }
 
+  // Admin Movies
+  async adminListMovies(page = 1, limit = 20): Promise<ApiResponse<any>> {
+    const qs = new URLSearchParams({ page: String(page), limit: String(limit) }).toString();
+    return this.makeRequest<any>(`/admin/movies?${qs}`);
+  }
+  async adminCreateMovie(payload: any): Promise<ApiResponse<any>> {
+    return this.makeRequest<any>('/admin/movies', { method: 'POST', body: JSON.stringify(payload) });
+    }
+  async adminUpdateMovie(id: string, patch: any): Promise<ApiResponse<any>> {
+    return this.makeRequest<any>(`/admin/movies/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) });
+  }
+  async adminDeleteMovie(id: string): Promise<ApiResponse<any>> {
+    return this.makeRequest<any>(`/admin/movies/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  // Admin Screens
+  async adminListScreens(page = 1, limit = 20): Promise<ApiResponse<any>> {
+    const qs = new URLSearchParams({ page: String(page), limit: String(limit) }).toString();
+    return this.makeRequest<any>(`/admin/screens?${qs}`);
+  }
+  async adminCreateScreen(payload: any): Promise<ApiResponse<any>> {
+    return this.makeRequest<any>('/admin/screens', { method: 'POST', body: JSON.stringify(payload) });
+  }
+  async adminUpdateScreen(screenId: string, patch: any): Promise<ApiResponse<any>> {
+    return this.makeRequest<any>(`/admin/screens/${encodeURIComponent(screenId)}`, { method: 'PUT', body: JSON.stringify(patch) });
+  }
+  async adminDeleteScreen(screenId: string): Promise<ApiResponse<any>> {
+    return this.makeRequest<any>(`/admin/screens/${encodeURIComponent(screenId)}`, { method: 'DELETE' });
+  }
+
   // Movie methods
   async getMovies(params?: {
     page?: number;
@@ -310,6 +367,10 @@ class ApiService {
 
   async getNowShowing(): Promise<ApiResponse<any[]>> {
     return this.makeRequest<any[]>(`/movies/now-showing`);
+  }
+
+  async getActiveMoviesWithShows(): Promise<ApiResponse<any[]>> {
+    return this.makeRequest<any[]>(`/movies/active-with-shows`);
   }
 
   async getComingSoon(): Promise<ApiResponse<any[]>> {
@@ -595,6 +656,96 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
+    });
+  }
+
+  // Screen Layout APIs
+  async saveScreenLayout(screenId: string, layoutData: any): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/screens/${screenId}/layout`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(layoutData)
+    });
+  }
+
+  async getScreenLayout(screenId: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/screens/${screenId}/layout`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  // Screen Management APIs
+  async getOwnerScreens(ownerId: string): Promise<ApiResponse<{ screenCount: number; screens: any[] }>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<{ screenCount: number; screens: any[] }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  async addOwnerScreen(ownerId: string, payload: { name?: string; type?: string }): Promise<ApiResponse<{ screenCount: number; screens: any[] }>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<{ screenCount: number; screens: any[] }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload || {})
+    });
+  }
+
+  // Screen Shows APIs
+  async getScreenShows(screenId: string, date?: string): Promise<ApiResponse<any[]>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return this.makeRequest<any[]>(`/screens/${encodeURIComponent(screenId)}/shows${qs}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  async saveScreenShows(screenId: string, movieId: string, showtimes: string[], bookingDate?: string, maxDays?: number): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ movieId, showtimes, bookingDate, maxDays })
+    });
+  }
+
+  async deleteScreenShow(screenId: string, showId: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows/${encodeURIComponent(showId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  // Movie advance booking management
+  async updateMovieAdvanceBooking(movieId: string, enabled: boolean): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/movies/${encodeURIComponent(movieId)}/advance-booking`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ enabled })
     });
   }
 }

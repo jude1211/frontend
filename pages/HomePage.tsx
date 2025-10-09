@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import MovieCard from '../components/MovieCard';
 import { useAppContext } from '../context/AppContext';
 import { apiService } from '../services/api';
 
 const HomePage: React.FC = () => {
   const [currentBanner, setCurrentBanner] = useState(0);
+  const navigate = useNavigate();
   const { city } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
   const [movies, setMovies] = useState<any[]>([]);
@@ -20,34 +22,36 @@ const HomePage: React.FC = () => {
   }, [movies.length]);
 
   useEffect(() => {
-    const fetchByLocation = async () => {
+    const fetchAssignedNowShowing = async () => {
       try {
         setIsLoading(true);
-        // Fetch all movies once if not cached
-        if (!allMovies.length) {
-          const all = await apiService.getNowShowing();
-          if (all.success && all.data) setAllMovies(all.data);
-        }
-
-        // Fetch location annotations
-        const res = await apiService.getMoviesByLocation(city || '');
-        if (res.success && res.data) {
-          // merge by _id to keep a stable movie list while adding location info
-          const byId: Record<string, any> = {};
-          res.data.forEach((m: any) => { byId[m._id] = m; });
-          const base = allMovies.length ? allMovies : res.data;
-          const merged = base.map((m: any) => ({ ...m, ...(byId[m._id] || {}) }));
-          setMovies(merged);
+        const res = await apiService.getActiveMoviesWithShows();
+        if (res.success && Array.isArray(res.data)) {
+          // Flatten into a simple movie list for the card grid; keep a few showtimes for preview
+          const mapped = res.data.map((b: any) => ({
+            _id: b.movie._id,
+            title: b.movie.title,
+            posterUrl: b.movie.posterUrl,
+            genre: Array.isArray(b.movie.genre) ? b.movie.genre.join('/') : (b.movie.genre || ''),
+            rating: 0,
+            duration: b.movie.duration,
+            showtimes: (b.screens || []).flatMap((s: any) => (s.showGroups || []).flatMap((g: any) => g.showtimes || [])).slice(0,3),
+            _hasAssignedShows: true
+          }));
+          setMovies(mapped);
+          setAllMovies(mapped);
         } else {
-          setMovies(allMovies);
+          setMovies([]);
+          setAllMovies([]);
         }
       } catch {
-        setMovies(allMovies);
+        setMovies([]);
+        setAllMovies([]);
       } finally {
         setIsLoading(false);
       }
     };
-    if (city) fetchByLocation();
+    fetchAssignedNowShowing();
   }, [city]);
 
   useEffect(() => {
@@ -130,30 +134,32 @@ const HomePage: React.FC = () => {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
           {movies.map((movie) => (
-              <div key={movie._id} className="group">
+              <div
+                key={movie._id}
+                className="group cursor-pointer"
+                onClick={() => navigate(`/movie/${movie._id}`)}
+              >
                 <MovieCard movie={{
                   id: movie._id,
                   title: movie.title,
                   posterUrl: movie.posterUrl,
                   genre: movie.genre,
                   rating: movie.rating || 0,
-                  duration: movie.duration
+                  duration: movie.duration,
+                  status: movie.status,
+                  runtimeDays: movie.runtimeDays,
+                  releaseDate: movie.releaseDate,
+                  advanceBookingEnabled: movie.advanceBookingEnabled
                 }} />
-              <div className="mt-2 text-xs text-gray-400">
-                {movie._inCity ? (
+                <div className="mt-2 text-xs text-gray-400">
                   <>
-                    <div>{movie.theatreOwner?.theatreName}</div>
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {(movie.showtimes || []).slice(0,3).map((t: string, i: number) => (
+                      {(movie.showtimes || []).map((t: string, i: number) => (
                         <span key={i} className="bg-brand-dark text-white px-2 py-0.5 rounded">{t}</span>
                       ))}
                     </div>
-                    <button className="mt-2 w-full bg-brand-red text-white py-1.5 rounded hover:bg-red-600 transition-colors">Book</button>
                   </>
-                ) : (
-                  <div className="text-gray-500 italic">No shows available in this location.</div>
-                )}
-              </div>
+                </div>
               </div>
             ))}
           </div>
@@ -178,28 +184,18 @@ const HomePage: React.FC = () => {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
           {comingSoon.slice(0, 8).map((movie) => (
-            <div key={`coming-${movie._id}`} className="relative group">
-              <div className="relative overflow-hidden rounded-xl">
-                <img src={movie.posterUrl} alt={movie.title} className="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-500" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-center">
-                  <div className="text-center text-white">
-                    <div className="bg-brand-red text-white px-4 py-2 rounded-full text-sm font-bold mb-3 shadow-lg">
-                      Coming Soon
-                    </div>
-                    <p className="text-sm opacity-90">Release Date TBA</p>
-                  </div>
-                </div>
-                <div className="absolute top-4 right-4">
-                  <div className="bg-black/50 text-white px-2 py-1 rounded text-xs">
-                    ⭐ {movie.rating || 0}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4">
-                <h3 className="font-bold text-white text-lg group-hover:text-brand-red transition-colors">{movie.title}</h3>
-                <p className="text-gray-400 text-sm">{movie.genre}</p>
-              </div>
-            </div>
+            <MovieCard key={`coming-${movie._id}`} movie={{
+              id: movie._id,
+              title: movie.title,
+              posterUrl: movie.posterUrl,
+              genre: movie.genre,
+              rating: movie.rating || 0,
+              duration: movie.duration,
+              status: movie.status,
+              runtimeDays: movie.runtimeDays,
+              releaseDate: movie.releaseDate,
+              advanceBookingEnabled: movie.advanceBookingEnabled
+            }} />
           ))}
         </div>
       </div>

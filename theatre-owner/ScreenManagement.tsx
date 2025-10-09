@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import BookNViewLoader from '../components/BookNViewLoader';
 import SeatLayoutBuilder, { SeatLayoutConfig, SeatClassRule, PricingTier } from '../components/SeatLayoutBuilder';
+import { apiService } from '../services/api';
 
 interface Screen {
   id: string;
@@ -16,7 +17,6 @@ interface Screen {
 const ScreenManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [screens, setScreens] = useState<Screen[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [seatConfig, setSeatConfig] = useState<SeatLayoutConfig>({
     numRows: 8,
     numCols: 12,
@@ -29,10 +29,14 @@ const ScreenManagement: React.FC = () => {
   });
   const [selectedSeatInfo, setSelectedSeatInfo] = useState<{ id: string; rowLabel: string; columnNumber: number; seatClass?: SeatClassRule } | null>(null);
   const [editMode, setEditMode] = useState(false);
-  const [manualLayout, setManualLayout] = useState<string[][] | null>(null);
   const [seatStats, setSeatStats] = useState<{ total: number; byClass: Record<string, number> }>({ total: 0, byClass: {} });
   const [aisleInput, setAisleInput] = useState<string>('5, 9');
   const [aisleError, setAisleError] = useState<boolean>(false);
+  const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
+  const [isSavingLayout, setIsSavingLayout] = useState(false);
+  const [layoutSaved, setLayoutSaved] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [processedSeats, setProcessedSeats] = useState<Map<string, any>>(new Map());
   const updateRuleLayout = (idx: number, patch: Partial<{ numRows: number; numCols: number; aisleColumns: number[] }>) => {
     setSeatConfig(prev => {
       const rules = prev.seatClassRules.slice();
@@ -45,6 +49,7 @@ const ScreenManagement: React.FC = () => {
 
   const handleConfigNumberChange = (key: 'numRows' | 'numCols', value: number) => {
     setSeatConfig((prev) => ({ ...prev, [key]: Math.max(1, value || 0) }));
+    setHasUnsavedChanges(true);
   };
 
   const handleAislesChange = (value: string) => {
@@ -57,6 +62,7 @@ const ScreenManagement: React.FC = () => {
       .filter((n) => !isNaN(n))
       .sort((a, b) => a - b);
     setSeatConfig((prev) => ({ ...prev, aisleColumns: parsed }));
+    setHasUnsavedChanges(true);
   };
 
   const updateRule = (index: number, patch: Partial<SeatClassRule>) => {
@@ -65,6 +71,7 @@ const ScreenManagement: React.FC = () => {
       rules[index] = { ...rules[index], ...patch } as SeatClassRule;
       return { ...prev, seatClassRules: rules };
     });
+    setHasUnsavedChanges(true);
   };
 
   const addRule = () => {
@@ -72,6 +79,7 @@ const ScreenManagement: React.FC = () => {
       ...prev,
       seatClassRules: prev.seatClassRules.concat({ rows: 'A', className: 'New Class', price: 0, tier: 'Base', color: '#64748b' })
     }));
+    setHasUnsavedChanges(true);
   };
 
   const removeRule = (index: number) => {
@@ -79,6 +87,255 @@ const ScreenManagement: React.FC = () => {
       ...prev,
       seatClassRules: prev.seatClassRules.filter((_, i) => i !== index)
     }));
+    setHasUnsavedChanges(true);
+  };
+
+  // Load saved layout for a screen
+  const loadScreenLayout = async (screenId: string) => {
+    try {
+      setIsLoading(true);
+      const response = await apiService.getScreenLayout(screenId);
+      
+      if (response.success && response.data) {
+        const layout = response.data;
+        
+        // Restore the exact configuration
+        setSeatConfig({
+          numRows: layout.meta?.rows || 8,
+          numCols: layout.meta?.columns || 12,
+          aisleColumns: layout.meta?.aisles || [5, 9],
+          seatClassRules: layout.seatClasses?.map((sc: any) => ({
+            rows: sc.rows,
+            className: sc.className,
+            price: sc.price,
+            tier: sc.tier,
+            color: sc.color
+          })) || [
+            { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
+            { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
+            { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
+          ]
+        });
+        
+        setAisleInput(layout.meta?.aisles?.join(', ') || '5, 9');
+        
+        // Store the complete seat data for rendering
+        if (layout.seats && layout.seats.length > 0) {
+          // Process saved seats to restore exact layout
+          processSavedSeats(layout.seats);
+        }
+        
+        setLayoutSaved(true);
+        setHasUnsavedChanges(false);
+      } else {
+        // No saved layout, use defaults
+        setLayoutSaved(false);
+        setHasUnsavedChanges(false);
+      }
+    } catch (error) {
+      console.error('Error loading screen layout:', error);
+      // On error, use default configuration
+      setLayoutSaved(false);
+      setHasUnsavedChanges(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Process saved seats to restore exact layout including positions and deletions
+  const processSavedSeats = (savedSeats: any[]) => {
+    const seatsById = new Map<string, any>();
+    savedSeats.forEach((seat) => {
+      const key = `${seat.rowLabel}-${seat.number}`;
+      seatsById.set(key, seat); // include inactive seats so they stay hidden
+    });
+    console.log('Loaded seats from DB:', savedSeats.length, 'mapped:', seatsById.size);
+    setProcessedSeats(seatsById);
+  };
+
+  // Save current layout for a screen
+  const saveScreenLayout = async () => {
+    console.log('Save layout clicked, selectedScreenId:', selectedScreenId);
+    if (!selectedScreenId) {
+      console.log('No screen selected, cannot save');
+      return;
+    }
+    
+    try {
+      setIsSavingLayout(true);
+      console.log('Starting to save layout...');
+      
+      // Get current seat grid data from the SeatLayoutBuilder
+      const currentSeats = getCurrentSeatData();
+      console.log('Current seats data:', currentSeats);
+      
+      const layoutData = {
+        screenId: selectedScreenId,
+        screenName: screens.find(s => s.id === selectedScreenId)?.name || `Screen ${selectedScreenId}`,
+        meta: {
+          rows: seatConfig.numRows,
+          columns: seatConfig.numCols,
+          aisles: seatConfig.aisleColumns
+        },
+        seatClasses: seatConfig.seatClassRules.map(rule => ({
+          className: rule.className,
+          price: rule.price,
+          color: rule.color,
+          tier: rule.tier,
+          rows: rule.rows
+        })),
+        seats: currentSeats,
+        updatedAt: new Date().toISOString()
+      };
+
+      console.log('Layout data to save:', layoutData);
+      const response = await apiService.saveScreenLayout(selectedScreenId, layoutData);
+      console.log('Save response:', response);
+      
+      if (response.success) {
+        setLayoutSaved(true);
+        setHasUnsavedChanges(false);
+        // Show success message
+        setTimeout(() => setLayoutSaved(false), 3000);
+      } else {
+        console.error('Failed to save layout:', response.error);
+      }
+    } catch (error) {
+      console.error('Error saving screen layout:', error);
+    } finally {
+      setIsSavingLayout(false);
+    }
+  };
+
+  // Get current seat data from the layout builder, merged with processed overrides (positions/deletions)
+  const getCurrentSeatData = () => {
+    const seats: any[] = [];
+    const seatClassByName = new Map<string, SeatClassRule>();
+    
+    seatConfig.seatClassRules.forEach(rule => {
+      seatClassByName.set(rule.className, rule);
+    });
+
+    for (let r = 0; r < seatConfig.numRows; r++) {
+      const rowLabel = String.fromCharCode('A'.charCodeAt(0) + r);
+      let seatNumber = 1;
+      for (let c = 1; c <= seatConfig.numCols + seatConfig.aisleColumns.length; c++) {
+        if (seatConfig.aisleColumns.includes(c)) {
+          continue;
+        }
+        const seatClass = findSeatClassForRow(rowLabel, seatConfig.seatClassRules);
+        if (seatClass) {
+          const defaultX = (c - 1) * 40;
+          const defaultY = r * 40;
+          const seatId = `${rowLabel}-${seatNumber}`;
+          const override = processedSeats.get(seatId);
+          seats.push({
+            rowLabel,
+            number: seatNumber,
+            x: override?.x ?? defaultX,
+            y: override?.y ?? defaultY,
+            className: seatClass.className,
+            price: seatClass.price,
+            color: seatClass.color,
+            status: override?.status ?? 'available',
+            isActive: override?.isActive !== false,
+            originalRow: rowLabel,
+            originalNumber: seatNumber,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+        }
+        seatNumber++;
+      }
+    }
+    return seats;
+  };
+
+  // Handle seat deletion (mark as inactive instead of removing)
+  const handleSeatDeletion = (seatId: string) => {
+    setProcessedSeats(prev => {
+      const newSeats = new Map(prev);
+      const seat = newSeats.get(seatId);
+      if (seat) {
+        newSeats.set(seatId, {
+          ...seat,
+          isActive: false,
+          status: 'deleted',
+          updatedAt: new Date().toISOString()
+        });
+      }
+      return newSeats;
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  // Handle seat drag and drop position updates
+  const handleSeatPositionUpdate = (seatId: string, newX: number, newY: number) => {
+    setProcessedSeats(prev => {
+      const newSeats = new Map(prev);
+      const seat = newSeats.get(seatId);
+      if (seat) {
+        newSeats.set(seatId, {
+          ...seat,
+          x: newX,
+          y: newY,
+          updatedAt: new Date().toISOString()
+        });
+      }
+      return newSeats;
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  // Handle seat restoration (mark as active again)
+  const handleSeatRestoration = (seatId: string) => {
+    setProcessedSeats(prev => {
+      const newSeats = new Map(prev);
+      const seat = newSeats.get(seatId);
+      if (seat) {
+        newSeats.set(seatId, {
+          ...seat,
+          isActive: true,
+          status: 'available',
+          updatedAt: new Date().toISOString()
+        });
+      }
+      return newSeats;
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  // Helper function to find seat class for a row
+  const findSeatClassForRow = (rowLabel: string, rules: SeatClassRule[]): SeatClassRule | undefined => {
+    for (const rule of rules) {
+      const parts = rule.rows.split(',');
+      for (const part of parts) {
+        const covered = parseRowRange(part);
+        if (covered.has(rowLabel)) return rule;
+      }
+    }
+    return undefined;
+  };
+
+  // Helper function to parse row ranges
+  const parseRowRange = (range: string): Set<string> => {
+    const trimmed = range.trim();
+    if (!trimmed) return new Set();
+    if (!trimmed.includes('-')) return new Set([trimmed]);
+    const [start, end] = trimmed.split('-').map((s) => s.trim());
+    const startCode = start.charCodeAt(0);
+    const endCode = end.charCodeAt(0);
+    const result = new Set<string>();
+    for (let c = Math.min(startCode, endCode); c <= Math.max(startCode, endCode); c++) {
+      result.add(String.fromCharCode(c));
+    }
+    return result;
+  };
+
+  // Handle screen selection
+  const handleScreenSelect = (screenId: string) => {
+    setSelectedScreenId(screenId);
+    loadScreenLayout(screenId);
   };
 
   useEffect(() => {
@@ -163,6 +420,8 @@ const ScreenManagement: React.FC = () => {
         });
       }
     } catch {}
+    // Auto-select first screen so Save button has an id by default
+    setSelectedScreenId(prev => prev ?? '1');
   }, []);
 
   const getStatusColor = (status: string) => {
@@ -217,7 +476,32 @@ const ScreenManagement: React.FC = () => {
               </div>
             </div>
             <button 
-              onClick={() => setShowAddModal(true)}
+              onClick={async () => {
+                try {
+                  const profile = await apiService.getTheatreOwnerProfile();
+                  const ownerId = profile?.success ? (profile.data?.id || profile.data?._id) : JSON.parse(localStorage.getItem('theatreOwnerData') || '{}')._id;
+                  if (!ownerId) return;
+                  const name = window.prompt('Screen name (optional):', `Screen ${screens.length + 1}`) || `Screen ${screens.length + 1}`;
+                  const res = await apiService.addOwnerScreen(ownerId as string, { name });
+                  if (res.success) {
+                    // Reflect basic count locally
+                    const updated = (res.data?.screens || []).map((s:any) => ({
+                      id: String(s.screenNumber),
+                      name: s.name || `Screen ${s.screenNumber}`,
+                      capacity: 120,
+                      type: (s.type || '2D') as any,
+                      status: 'active' as const,
+                      currentMovie: 'None',
+                      nextShowtime: 'N/A',
+                      occupancy: 0
+                    }));
+                    setScreens(updated);
+                    setSelectedScreenId(String(updated.length));
+                  }
+                } catch (e) {
+                  console.error('Add screen failed', e);
+                }
+              }}
               className="bg-brand-red text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-all duration-300 flex items-center space-x-2"
             >
               <i className="fas fa-plus"></i>
@@ -404,7 +688,14 @@ const ScreenManagement: React.FC = () => {
                 onSeatClick={(id, meta) => setSelectedSeatInfo({ id, ...meta })}
                 maxReservableSeats={10}
                 editMode={editMode}
-                onManualLayoutChange={(ids) => setManualLayout(ids)}
+                processedSeats={processedSeats}
+                onSeatDeletion={handleSeatDeletion}
+                onSeatPositionUpdate={handleSeatPositionUpdate}
+                onSeatRestoration={handleSeatRestoration}
+                onManualLayoutChange={(_ids) => {
+                  // Handle manual layout changes if needed
+                  setHasUnsavedChanges(true);
+                }}
                 onSeatGridChange={(grid) => {
                   const counts: Record<string, number> = {};
                   let total = 0;
@@ -418,7 +709,48 @@ const ScreenManagement: React.FC = () => {
                 }}
               />
               {editMode && (
-                <div className="mt-2 text-xs text-brand-light-gray">Manual layout changes will be saved with your screen configuration.</div>
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-xs text-brand-light-gray">
+                    Manual layout changes will be saved with your screen configuration.
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="text-xs text-gray-400">
+                      Screen ID: {selectedScreenId || 'None'}
+                    </div>
+                    {hasUnsavedChanges && (
+                      <span className="text-yellow-400 text-sm">
+                        <i className="fas fa-exclamation-triangle mr-1"></i>
+                        Unsaved changes
+                      </span>
+                    )}
+                    {layoutSaved && (
+                      <span className="text-green-400 text-sm">
+                        <i className="fas fa-check-circle mr-1"></i>
+                        Layout saved!
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        console.log('Save button clicked');
+                        saveScreenLayout();
+                      }}
+                      disabled={isSavingLayout || !selectedScreenId}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                    >
+                      {isSavingLayout ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-save"></i>
+                          <span>Save Layout</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -539,13 +871,25 @@ const ScreenManagement: React.FC = () => {
 
                 {/* Actions */}
                 <div className="flex space-x-2 mt-6">
-                  <button className="flex-1 bg-brand-red text-white py-2 rounded-lg hover:bg-red-600 transition-colors text-sm">
+                  <button 
+                    onClick={() => {
+                      setEditMode(true);
+                      handleScreenSelect(screen.id);
+                    }}
+                    className="flex-1 bg-brand-red text-white py-2 rounded-lg hover:bg-red-600 transition-colors text-sm"
+                  >
                     <i className="fas fa-edit mr-1"></i>
-                    Edit
+                    Edit Layout
                   </button>
-                  <button className="flex-1 bg-brand-dark text-white py-2 rounded-lg hover:bg-brand-dark/80 transition-colors text-sm">
+                  <button 
+                    onClick={() => {
+                      setEditMode(false);
+                      handleScreenSelect(screen.id);
+                    }}
+                    className="flex-1 bg-brand-dark text-white py-2 rounded-lg hover:bg-brand-dark/80 transition-colors text-sm"
+                  >
                     <i className="fas fa-eye mr-1"></i>
-                    View
+                    View Layout
                   </button>
                 </div>
               </div>

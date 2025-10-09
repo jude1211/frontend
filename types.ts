@@ -9,6 +9,10 @@ export interface Movie {
   duration: string;
   description: string;
   trailerUrl: string;
+  status?: 'Now Showing' | 'Coming Soon';
+  runtimeDays?: number;
+  releaseDate?: string;
+  advanceBookingEnabled?: boolean;
 }
 
 export interface Showtime {

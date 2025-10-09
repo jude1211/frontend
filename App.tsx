@@ -13,6 +13,8 @@ import ProfilePage from './pages/ProfilePage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminManageMovies from './pages/AdminManageMovies';
+import AdminManageScreens from './pages/AdminManageScreens';
 import TheatreOwnerSignupPage from './pages/TheatreOwnerSignupPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import TheatreOwnerProtectedRoute from './components/TheatreOwnerProtectedRoute';
@@ -21,6 +23,7 @@ import TheatreOwnerLanding from './pages/TheatreOwnerLanding';
 import TheatreOwnerDashboard from './pages/TheatreOwnerDashboard';
 import MovieManagement from './theatre-owner/MovieManagement';
 import ScreenManagement from './theatre-owner/ScreenManagement';
+import ManageScreensAndShows from './theatre-owner/ManageScreensAndShows';
 import SnacksManagement from './theatre-owner/SnacksManagement';
 import TheatreOwnerReports from './pages/TheatreOwnerReports';
 import TheatreOwnerProfile from './pages/TheatreOwnerProfile';
@@ -36,7 +39,7 @@ const App: React.FC = () => {
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/movie/:id" element={<MovieDetailPage />} />
-                <Route path="/select-seats/:movieId/:showtimeId" element={<SeatSelectionPage />} />
+                <Route path="/select-seats/:movieId/:screenId/:bookingDate/:time" element={<SeatSelectionPage />} />
                 <Route path="/snacks" element={<SnackOrderPage />} />
                 <Route path="/checkout" element={<CheckoutPage />} />
                 <Route path="/profile" element={
@@ -53,6 +56,16 @@ const App: React.FC = () => {
                 <Route path="/admin/dashboard" element={
                   <ProtectedRoute adminOnly={true}>
                     <AdminDashboardPage />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/movies" element={
+                  <ProtectedRoute adminOnly={true}>
+                    <AdminManageMovies />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/screens" element={
+                  <ProtectedRoute adminOnly={true}>
+                    <AdminManageScreens />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
@@ -78,6 +91,11 @@ const App: React.FC = () => {
                 <Route path="/theatre-owner/screens" element={
                   <TheatreOwnerProtectedRoute>
                     <ScreenManagement />
+                  </TheatreOwnerProtectedRoute>
+                } />
+                <Route path="/theatre-owner/shows" element={
+                  <TheatreOwnerProtectedRoute>
+                    <ManageScreensAndShows />
                   </TheatreOwnerProtectedRoute>
                 } />
                 <Route path="/theatre-owner/snacks" element={

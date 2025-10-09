@@ -221,6 +221,13 @@ const TheatreOwnerDashboard: React.FC = () => {
                 <span>Add New Show</span>
               </button>
               <button 
+                onClick={() => navigate('/theatre-owner/shows')}
+                className="w-full bg-red-500 hover:bg-red-600 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
+              >
+                <i className="fas fa-film text-xl"></i>
+                <span>Show Management</span>
+              </button>
+              <button 
                 onClick={() => navigate('/theatre-owner/screens')}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
               >
@@ -297,18 +304,18 @@ const TheatreOwnerDashboard: React.FC = () => {
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
             <h2 className="text-xl font-bold text-white mb-4">🚀 Coming Soon</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-gray-700 rounded-lg p-4">
+              <button onClick={() => navigate('/theatre-owner/shows')} className="bg-gray-700 rounded-lg p-4 text-left hover:bg-gray-600 transition">
                 <h3 className="text-white font-semibold mb-2">Show Management</h3>
                 <p className="text-gray-400 text-sm">Add and manage movie shows, timings, and pricing</p>
-              </div>
+              </button>
               <div className="bg-gray-700 rounded-lg p-4">
                 <h3 className="text-white font-semibold mb-2">Booking Analytics</h3>
                 <p className="text-gray-400 text-sm">Track bookings, revenue, and customer insights</p>
               </div>
-              <div className="bg-gray-700 rounded-lg p-4">
+              <button onClick={() => navigate('/theatre-owner/screens')} className="bg-gray-700 rounded-lg p-4 text-left hover:bg-gray-600 transition">
                 <h3 className="text-white font-semibold mb-2">Seat Configuration</h3>
                 <p className="text-gray-400 text-sm">Configure seating layouts and pricing tiers</p>
-              </div>
+              </button>
             </div>
           </div>
         )}

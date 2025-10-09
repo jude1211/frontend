@@ -24,6 +24,10 @@ export interface SeatLayoutBuilderProps {
   maxReservableSeats?: number;
   onSeatClick?: (seatId: string, meta: { rowLabel: string; columnNumber: number; seatClass?: SeatClassRule }) => void;
   editMode?: boolean;
+  processedSeats?: Map<string, any>;
+  onSeatDeletion?: (seatId: string) => void;
+  onSeatPositionUpdate?: (seatId: string, x: number, y: number) => void;
+  onSeatRestoration?: (seatId: string) => void;
   onManualLayoutChange?: (seatIdsByRow: string[][]) => void;
   onSeatGridChange?: (grid: Array<Array<{ row: number; col: number; rowLabel: string; number: number; category?: string }>>) => void;
 }
@@ -57,7 +61,18 @@ function findSeatClassForRow(rowLabel: string, rules: SeatClassRule[]): SeatClas
   return undefined;
 }
 
-const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReservableSeats = 10, onSeatClick, editMode = false, onManualLayoutChange, onSeatGridChange }) => {
+const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ 
+  config, 
+  maxReservableSeats = 10, 
+  onSeatClick, 
+  editMode = false, 
+  processedSeats,
+  onSeatDeletion,
+  onSeatPositionUpdate,
+  onSeatRestoration,
+  onManualLayoutChange, 
+  onSeatGridChange 
+}) => {
   const { groups, legend, classByName } = useMemo(() => {
     const legendMap = new Map<string, SeatClassRule>();
     const classByNameMap = new Map<string, SeatClassRule>();
@@ -82,7 +97,27 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
           const seatId = `${rowLabel}-${seatCounter}`;
           const tooltip = `${rowLabel}${seatCounter} · ${rule.className} · ₹${rule.price} · ${rule.tier}`;
           const isVip = rule.tier === 'VIP';
-          row.push({ id: seatId, number: seatCounter, tooltip, isReserved: false, isVIP: isVip, isEmpty: false });
+          
+          // Check if we have processed seat data for this seat
+          const processedSeat = processedSeats?.get(seatId);
+          const isActive = processedSeat?.isActive !== false;
+          const seatStatus = processedSeat?.status || 'available';
+          
+          row.push({ 
+            id: seatId, 
+            number: seatCounter, 
+            tooltip, 
+            isReserved: false, 
+            isVIP: isVip, 
+            isEmpty: false,
+            isActive: isActive,
+            status: seatStatus,
+            x: processedSeat?.x || ((c - 1) * 40),
+            y: processedSeat?.y || (r * 40),
+            className: rule.className,
+            price: rule.price,
+            color: rule.color
+          });
         }
         rows.push(row);
       }
@@ -148,10 +183,29 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
         const placeholder = { ...b };
         next[toG][toR][toC] = a;
         next[dragFrom.g][dragFrom.r][dragFrom.c] = placeholder;
+        
+        // Update position in processed seats
+        if (a.id && onSeatPositionUpdate) {
+          const newX = (toC * 40); // Calculate new X position
+          const newY = (toR * 40); // Calculate new Y position
+          onSeatPositionUpdate(a.id, newX, newY);
+        }
       } else {
         // swap seats
         next[dragFrom.g][dragFrom.r][dragFrom.c] = b;
         next[toG][toR][toC] = a;
+        
+        // Update positions for both seats
+        if (a.id && onSeatPositionUpdate) {
+          const newX = (toC * 40);
+          const newY = (toR * 40);
+          onSeatPositionUpdate(a.id, newX, newY);
+        }
+        if (b.id && onSeatPositionUpdate) {
+          const newX = (dragFrom.c * 40);
+          const newY = (dragFrom.r * 40);
+          onSeatPositionUpdate(b.id, newX, newY);
+        }
       }
       return next;
     });
@@ -265,6 +319,11 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
                                   return <div key={colIdx} className="w-6 h-6 mx-0.5 opacity-20"></div>;
                                 }
                                 const ruleColor = g.rule?.color || '#22c55e';
+                                // Merge any processed overrides for this seat id
+                                const seatId = row[rowIdx]?.id || `${getRowLabel(globalR)}-${(row[colIdx]?.number||0)}`;
+                                const processedSeat = processedSeats?.get(seatId);
+                                const isActive = processedSeat?.isActive !== false;
+                                const seatStatus = processedSeat?.status || 'available';
                                 return (
                                   <div
                                     key={colIdx}
@@ -296,20 +355,54 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
                                           onDragStart={onDragStart(idx, globalR, globalC)}
                                           onDragEnd={onDragEnd}
                                           onClick={handleCellClickEdit(idx, globalR, globalC, getRowLabel(globalR), ruleColor)}
+                                          onContextMenu={(e) => {
+                                            e.preventDefault();
+                                            if (isActive === false) {
+                                              onSeatRestoration?.(cell.id);
+                                            } else {
+                                              onSeatDeletion?.(cell.id);
+                                            }
+                                          }}
                                           title={cell.tooltip}
-                                          className="w-full h-full rounded border text-[10px] text-gray-200 flex items-center justify-center"
-                                          style={{ backgroundColor: 'rgba(34,197,94,0.08)', borderColor: ruleColor, borderWidth: 2 as any }}
+                                          className={`w-full h-full rounded border text-[10px] text-gray-200 flex items-center justify-center ${
+                                            isActive === false ? 'opacity-50' : ''
+                                          }`}
+                                          style={{ 
+                                            backgroundColor: isActive === false ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)', 
+                                            borderColor: isActive === false ? '#ef4444' : ruleColor, 
+                                            borderWidth: 2 as any 
+                                          }}
                                         >
                                           {cell.number}
                                         </button>
-                                        <button
-                                          aria-label="Delete seat"
-                                          className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-600 text-white text-[9px] leading-3 hidden group-hover:flex items-center justify-center"
-                                          style={{ zIndex: 10 as any }}
-                                          onClick={deleteSeatAt(idx, globalR, globalC)}
-                                        >
-                                          ×
-                                        </button>
+                                        {isActive !== false && (
+                                          <button
+                                            aria-label="Delete seat"
+                                            className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-600 text-white text-[9px] leading-3 hidden group-hover:flex items-center justify-center"
+                                            style={{ zIndex: 10 as any }}
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              onSeatDeletion?.(cell.id);
+                                            }}
+                                          >
+                                            ×
+                                          </button>
+                                        )}
+                                        {isActive === false && (
+                                          <button
+                                            aria-label="Restore seat"
+                                            className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-green-600 text-white text-[9px] leading-3 hidden group-hover:flex items-center justify-center"
+                                            style={{ zIndex: 10 as any }}
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              onSeatRestoration?.(cell.id);
+                                            }}
+                                          >
+                                            ↺
+                                          </button>
+                                        )}
                                       </>
                                     )}
                                   </div>
@@ -341,8 +434,14 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({ config, maxReserv
                                     key={colIdx}
                                     onClick={() => onSeatClick?.(cell.id, { rowLabel, columnNumber: cell.number, seatClass })}
                                     title={cell.tooltip}
-                                    className="w-6 h-6 mx-0.5 rounded border text-[10px] text-gray-200 flex items-center justify-center"
-                                    style={{ backgroundColor: 'rgba(34,197,94,0.08)', borderColor: ruleColor, borderWidth: 2 as any }}
+                                    className={`w-6 h-6 mx-0.5 rounded border text-[10px] text-gray-200 flex items-center justify-center ${
+                                      cell.isActive === false ? 'opacity-50' : ''
+                                    }`}
+                                    style={{ 
+                                      backgroundColor: cell.isActive === false ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)', 
+                                      borderColor: cell.isActive === false ? '#ef4444' : ruleColor, 
+                                      borderWidth: 2 as any 
+                                    }}
                                   >
                                     {cell.number}
                                   </button>
