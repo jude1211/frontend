@@ -41,12 +41,115 @@ const ScreenManagement: React.FC = () => {
   const [processedSeats, setProcessedSeats] = useState<Map<string, any>>(new Map());
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  
+  // Add Screen Modal State
+  const [showAddScreenModal, setShowAddScreenModal] = useState(false);
+  const [newScreenName, setNewScreenName] = useState('');
+  const [newScreenType, setNewScreenType] = useState<'2D' | '3D' | 'IMAX' | '4DX'>('2D');
+  const [isAddingScreen, setIsAddingScreen] = useState(false);
+  
+  // Delete Screen Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [screenToDelete, setScreenToDelete] = useState<Screen | null>(null);
+  const [isDeletingScreen, setIsDeletingScreen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   // Show toast notification
   const showToastMessage = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
+  };
+
+  // Handle adding a new screen
+  const handleAddScreen = async () => {
+    if (!newScreenName.trim()) {
+      showToastMessage('Please enter a screen name');
+      return;
+    }
+
+    setIsAddingScreen(true);
+    try {
+      const profile = await apiService.getTheatreOwnerProfile();
+      const ownerId = profile?.success ? (profile.data?.id || profile.data?._id) : JSON.parse(localStorage.getItem('theatreOwnerData') || '{}')._id;
+      if (!ownerId) {
+        showToastMessage('Unable to identify theatre owner');
+        return;
+      }
+      
+      const res = await apiService.addOwnerScreen(ownerId as string, { 
+        name: newScreenName.trim(), 
+        type: newScreenType
+      });
+      
+      if (res.success) {
+        // Close modal and reset form
+        setShowAddScreenModal(false);
+        setNewScreenName('');
+        setNewScreenType('2D');
+        
+        // Reload screens from database to get updated data
+        await loadScreens();
+        showToastMessage('Screen added successfully!');
+      } else {
+        console.error('Failed to add screen:', res.error);
+        showToastMessage('Failed to add screen. Please try again.');
+      }
+    } catch (e) {
+      console.error('Add screen failed', e);
+      showToastMessage('Failed to add screen. Please try again.');
+    } finally {
+      setIsAddingScreen(false);
+    }
+  };
+
+  // Open add screen modal
+  const openAddScreenModal = () => {
+    setNewScreenName(`Screen ${screens.length + 1}`);
+    setNewScreenType('2D');
+    setShowAddScreenModal(true);
+  };
+
+  // Handle deleting a screen
+  const handleDeleteScreen = async () => {
+    if (!screenToDelete) return;
+
+    setIsDeletingScreen(true);
+    try {
+      const profile = await apiService.getTheatreOwnerProfile();
+      const ownerId = profile?.success ? (profile.data?.id || profile.data?._id) : JSON.parse(localStorage.getItem('theatreOwnerData') || '{}')._id;
+      if (!ownerId) {
+        showToastMessage('Unable to identify theatre owner');
+        return;
+      }
+      
+      const res = await apiService.deleteOwnerScreen(ownerId as string, screenToDelete.id);
+      
+      if (res.success) {
+        // Close modal and reset state
+        setShowDeleteModal(false);
+        setScreenToDelete(null);
+        
+        // Reload screens from database to get updated data
+        await loadScreens();
+        showToastMessage(`Screen deleted successfully! Removed from all database collections.`);
+      } else {
+        console.error('Failed to delete screen:', res.error);
+        showToastMessage('Failed to delete screen. Please try again.');
+      }
+    } catch (e) {
+      console.error('Delete screen failed', e);
+      showToastMessage('Failed to delete screen. Please try again.');
+    } finally {
+      setIsDeletingScreen(false);
+    }
+  };
+
+  // Open delete screen modal
+  const openDeleteModal = (screen: Screen) => {
+    setScreenToDelete(screen);
+    setDeleteConfirmation('');
+    setShowDeleteModal(true);
   };
 
   // Refresh layout from database
@@ -59,6 +162,40 @@ const ScreenManagement: React.FC = () => {
       showToastMessage('Layout refreshed from database successfully!');
     } else {
       showToastMessage('Failed to refresh layout from database');
+    }
+  };
+
+  // Sync missing screen layouts
+  const syncScreenLayouts = async () => {
+    try {
+      const theatreOwnerData = JSON.parse(localStorage.getItem('theatreOwnerData') || '{}');
+      const theatreOwnerId = theatreOwnerData._id;
+      
+      if (!theatreOwnerId) {
+        showToastMessage('Theatre owner ID not found');
+        return;
+      }
+
+      console.log('Syncing missing screen layouts...');
+      const response = await apiService.syncScreenLayouts(theatreOwnerId);
+      
+      if (response.success) {
+        const { createdLayouts, existingLayouts, totalScreens } = response.data;
+        if (createdLayouts.length > 0) {
+          showToastMessage(`Synced ${createdLayouts.length} missing screen layouts using Screen 1's configuration!`);
+        } else {
+          showToastMessage('All screen layouts are already up to date!');
+        }
+        console.log('Sync result:', { createdLayouts, existingLayouts, totalScreens });
+        
+        // Refresh the screens list
+        await loadScreens();
+      } else {
+        showToastMessage('Failed to sync screen layouts');
+      }
+    } catch (error) {
+      console.error('Error syncing screen layouts:', error);
+      showToastMessage('Error syncing screen layouts');
     }
   };
 
@@ -611,6 +748,8 @@ const ScreenManagement: React.FC = () => {
       
       if (response.success && response.data) {
         const screensArray = Array.isArray(response.data) ? response.data : response.data.screens || [];
+        console.log('Loaded screens from API:', screensArray.map(s => ({ screenNumber: s.screenNumber, name: s.name })));
+        
         const screensData = screensArray.map((screen: any) => ({
           id: screen.screenNumber.toString(),
           name: screen.name || `Screen ${screen.screenNumber}`,
@@ -624,6 +763,7 @@ const ScreenManagement: React.FC = () => {
           originalData: screen
         }));
         
+        console.log('Processed screens data:', screensData.map(s => ({ id: s.id, name: s.name })));
         setScreens(screensData);
         
         // If we have screen data, load the first screen's layout
@@ -783,35 +923,7 @@ const ScreenManagement: React.FC = () => {
               </div>
             </div>
             <button 
-              onClick={async () => {
-                try {
-                  const profile = await apiService.getTheatreOwnerProfile();
-                  const ownerId = profile?.success ? (profile.data?.id || profile.data?._id) : JSON.parse(localStorage.getItem('theatreOwnerData') || '{}')._id;
-                  if (!ownerId) return;
-                  
-                  const name = window.prompt('Screen name (optional):', `Screen ${screens.length + 1}`) || `Screen ${screens.length + 1}`;
-                  const type = window.prompt('Screen type (2D, 3D, IMAX, 4DX):', '2D') || '2D';
-                  
-                  const res = await apiService.addOwnerScreen(ownerId as string, { 
-                    name, 
-                    type: type as '2D' | '3D' | 'IMAX' | '4DX'
-                  });
-                  
-                  if (res.success) {
-                    // Reload screens from database to get updated data
-                    await loadScreens();
-                    
-                    // The loadScreens function will automatically select the first screen
-                    // and set the selectedScreenId, so we don't need to do anything here
-                  } else {
-                    console.error('Failed to add screen:', res.error);
-                    alert('Failed to add screen. Please try again.');
-                  }
-                } catch (e) {
-                  console.error('Add screen failed', e);
-                  alert('Failed to add screen. Please try again.');
-                }
-              }}
+              onClick={openAddScreenModal}
               className="bg-brand-red text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-all duration-300 flex items-center space-x-2"
             >
               <i className="fas fa-plus"></i>
@@ -1047,6 +1159,18 @@ const ScreenManagement: React.FC = () => {
                     <div className="flex space-x-3">
                       <button
                         onClick={() => {
+                          console.log('Sync button clicked');
+                          syncScreenLayouts();
+                        }}
+                        className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                        title="Sync missing screen layouts using Screen 1's configuration"
+                      >
+                        <i className="fas fa-sync"></i>
+                        <span>Sync Layouts</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => {
                           console.log('Refresh button clicked');
                           refreshLayout();
                         }}
@@ -1091,6 +1215,9 @@ const ScreenManagement: React.FC = () => {
               <div>
                 <p className="text-brand-light-gray text-sm">Total Screens</p>
                 <p className="text-2xl font-bold text-white">{screens.length}</p>
+                <p className="text-xs text-brand-light-gray mt-1">
+                  New screens inherit Screen 1's configuration
+                </p>
               </div>
               <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
                 <i className="fas fa-tv text-white"></i>
@@ -1220,12 +1347,257 @@ const ScreenManagement: React.FC = () => {
                     <i className="fas fa-eye mr-1"></i>
                     View Layout
                   </button>
+                  <button 
+                    onClick={() => openDeleteModal(screen)}
+                    className="bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors text-sm"
+                    title="Delete Screen"
+                  >
+                    <i className="fas fa-trash"></i>
+                  </button>
                 </div>
               </div>
             </div>
           ))}
         </div>
       </div>
+      
+      {/* Add Screen Modal */}
+      {showAddScreenModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-brand-gray to-brand-dark rounded-3xl p-0 border border-brand-dark/40 shadow-2xl overflow-hidden w-full max-w-md">
+            {/* Modal Header */}
+            <div className="px-8 pt-8 pb-6 border-b border-brand-dark/40 bg-gradient-to-r from-brand-gray to-brand-dark">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-brand-red to-red-600 rounded-2xl flex items-center justify-center">
+                    <i className="fas fa-plus text-white text-xl"></i>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Add New Screen</h2>
+                    <p className="text-brand-light-gray text-sm">Create a new screen for your theatre</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAddScreenModal(false)}
+                  className="text-brand-light-gray hover:text-white transition-colors"
+                >
+                  <i className="fas fa-times text-xl"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-8 py-6 space-y-6">
+              {/* Screen Name Input */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Screen Name
+                </label>
+                <input
+                  type="text"
+                  value={newScreenName}
+                  onChange={(e) => setNewScreenName(e.target.value)}
+                  placeholder="Enter screen name"
+                  className="w-full bg-black/40 border border-gray-600 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-transparent transition-all duration-300"
+                  autoFocus
+                />
+              </div>
+
+              {/* Screen Type Selection */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Screen Type
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {(['2D', '3D', 'IMAX', '4DX'] as const).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setNewScreenType(type)}
+                      className={`px-4 py-3 rounded-xl border-2 transition-all duration-300 ${
+                        newScreenType === type
+                          ? 'border-brand-red bg-brand-red/20 text-brand-red'
+                          : 'border-gray-600 bg-black/40 text-white hover:border-gray-500'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center space-x-2">
+                        <i className={`fas ${
+                          type === '2D' ? 'fa-tv' :
+                          type === '3D' ? 'fa-cube' :
+                          type === 'IMAX' ? 'fa-expand' :
+                          'fa-star'
+                        }`}></i>
+                        <span className="font-medium">{type}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Info Text */}
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                <div className="flex items-start space-x-3">
+                  <i className="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                  <div className="text-sm text-blue-200">
+                    <p className="font-medium mb-1">Configuration Note</p>
+                    <p>New screens will inherit the seat layout configuration from Screen 1, including rows, columns, aisles, and seat classes.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-8 py-6 border-t border-brand-dark/40 bg-gradient-to-r from-brand-gray to-brand-dark">
+              <div className="flex space-x-4">
+                <button
+                  onClick={() => setShowAddScreenModal(false)}
+                  className="flex-1 bg-gray-600 text-white px-6 py-3 rounded-xl hover:bg-gray-700 transition-all duration-300 font-medium"
+                  disabled={isAddingScreen}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddScreen}
+                  disabled={isAddingScreen || !newScreenName.trim()}
+                  className="flex-1 bg-brand-red text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-all duration-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  {isAddingScreen ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Adding...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-plus"></i>
+                      <span>Add Screen</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Delete Screen Confirmation Modal */}
+      {showDeleteModal && screenToDelete && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-brand-gray to-brand-dark rounded-3xl p-0 border border-brand-dark/40 shadow-2xl overflow-hidden w-full max-w-md">
+            {/* Modal Header */}
+            <div className="px-8 pt-8 pb-6 border-b border-brand-dark/40 bg-gradient-to-r from-brand-gray to-brand-dark">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-700 rounded-2xl flex items-center justify-center">
+                    <i className="fas fa-exclamation-triangle text-white text-xl"></i>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Delete Screen</h2>
+                    <p className="text-brand-light-gray text-sm">This action cannot be undone</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="text-brand-light-gray hover:text-white transition-colors"
+                >
+                  <i className="fas fa-times text-xl"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-8 py-6 space-y-6">
+              {/* Warning Message */}
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+                <div className="flex items-start space-x-3">
+                  <i className="fas fa-exclamation-triangle text-red-400 mt-0.5"></i>
+                  <div className="text-sm text-red-200">
+                    <p className="font-medium mb-1">Warning: Permanent Action</p>
+                    <p>You are about to delete <strong>{screenToDelete.name}</strong>. This will permanently remove the screen and ALL its associated data from the database including:</p>
+                    <ul className="mt-2 ml-4 list-disc space-y-1">
+                      <li>Seat layouts and configurations</li>
+                      <li>Show schedules and timings</li>
+                      <li>All bookings (regular and offline)</li>
+                      <li>Screen application data</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Screen Details */}
+              <div className="bg-gray-500/10 border border-gray-500/30 rounded-xl p-4">
+                <h3 className="text-white font-medium mb-3">Screen Details</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Name:</span>
+                    <span className="text-white">{screenToDelete.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Type:</span>
+                    <span className="text-white">{screenToDelete.type}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Capacity:</span>
+                    <span className="text-white">{screenToDelete.capacity} seats</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Status:</span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      screenToDelete.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                      screenToDelete.status === 'maintenance' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-red-500/20 text-red-400'
+                    }`}>
+                      {screenToDelete.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Confirmation Input */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Type "DELETE" to confirm
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmation}
+                  onChange={(e) => setDeleteConfirmation(e.target.value)}
+                  placeholder="Type DELETE to confirm"
+                  className="w-full bg-black/40 border border-gray-600 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-300"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-8 py-6 border-t border-brand-dark/40 bg-gradient-to-r from-brand-gray to-brand-dark">
+              <div className="flex space-x-4">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 bg-gray-600 text-white px-6 py-3 rounded-xl hover:bg-gray-700 transition-all duration-300 font-medium"
+                  disabled={isDeletingScreen}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteScreen}
+                  disabled={isDeletingScreen || deleteConfirmation !== 'DELETE'}
+                  className="flex-1 bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-all duration-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  {isDeletingScreen ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-trash"></i>
+                      <span>Delete Screen</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Toast Notification */}
       {showToast && (

@@ -706,6 +706,17 @@ class ApiService {
     });
   }
 
+  async syncScreenLayouts(ownerId: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/theatres/owner/${encodeURIComponent(ownerId)}/sync-layouts`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  }
+
   async addOwnerScreen(ownerId: string, payload: { name?: string; type?: string }): Promise<ApiResponse<{ screenCount: number; screens: any[] }>> {
     const token = localStorage.getItem('theatreOwnerToken');
     return this.makeRequest<{ screenCount: number; screens: any[] }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens`, {
@@ -715,6 +726,17 @@ class ApiService {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload || {})
+    });
+  }
+
+  async deleteOwnerScreen(ownerId: string, screenId: string): Promise<ApiResponse<{ message: string }>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<{ message: string }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
     });
   }
 

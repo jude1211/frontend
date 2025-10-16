@@ -643,14 +643,20 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                     )}
                                   
                                     {cell.isEmpty ? (
-                                      <button
-                                      onClick={handleCellClickEdit(tierIndex, rowIdx, colIdx, cell.rowLabel, ruleColor)}
-                                        className="w-full h-full rounded border border-dashed text-[10px] text-gray-400 flex items-center justify-center"
-                                        style={{ borderColor: `${ruleColor}77`, backgroundColor: 'transparent' }}
-                                        title="Add seat here"
-                                      >
-                                        +
-                                      </button>
+                                      // Only show "+" button in edit mode and if seat is not deleted
+                                      editMode && isActive ? (
+                                        <button
+                                          onClick={handleCellClickEdit(tierIndex, rowIdx, colIdx, cell.rowLabel, ruleColor)}
+                                          className="w-full h-full rounded border border-dashed text-[10px] text-gray-400 flex items-center justify-center"
+                                          style={{ borderColor: `${ruleColor}77`, backgroundColor: 'transparent' }}
+                                          title="Add seat here"
+                                        >
+                                          +
+                                        </button>
+                                      ) : (
+                                        // In view mode or for deleted seats, show empty space
+                                        <div className="w-full h-full rounded"></div>
+                                      )
                                     ) : (
                                       <>
                                         <button
