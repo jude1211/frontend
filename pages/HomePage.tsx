@@ -22,36 +22,69 @@ const HomePage: React.FC = () => {
   }, [movies.length]);
 
   useEffect(() => {
-    const fetchAssignedNowShowing = async () => {
+    const fetchAllMoviesWithShowtimes = async () => {
       try {
         setIsLoading(true);
-        const res = await apiService.getActiveMoviesWithShows();
-        if (res.success && Array.isArray(res.data)) {
-          // Flatten into a simple movie list for the card grid; keep a few showtimes for preview
-          const mapped = res.data.map((b: any) => ({
-            _id: b.movie._id,
-            title: b.movie.title,
-            posterUrl: b.movie.posterUrl,
-            genre: Array.isArray(b.movie.genre) ? b.movie.genre.join('/') : (b.movie.genre || ''),
-            rating: 0,
-            duration: b.movie.duration,
-            showtimes: (b.screens || []).flatMap((s: any) => (s.showGroups || []).flatMap((g: any) => g.showtimes || [])).slice(0,3),
-            _hasAssignedShows: true
-          }));
-          setMovies(mapped);
-          setAllMovies(mapped);
-        } else {
+        
+        // First, fetch all active movies
+        const moviesRes = await apiService.getNowShowing();
+        if (!moviesRes.success || !Array.isArray(moviesRes.data)) {
           setMovies([]);
           setAllMovies([]);
+          return;
         }
-      } catch {
+
+        // For each movie, fetch its showtimes
+        const moviesWithShowtimes = await Promise.all(
+          moviesRes.data.map(async (movie: any) => {
+            try {
+              const showtimesRes = await apiService.getMovieShowtimes(movie._id);
+              const screens = showtimesRes.success && Array.isArray(showtimesRes.data) ? showtimesRes.data : [];
+              
+              return {
+                _id: movie._id,
+                title: movie.title,
+                posterUrl: movie.posterUrl,
+                genre: Array.isArray(movie.genre) ? movie.genre.join('/') : (movie.genre || ''),
+                rating: movie.rating || 0,
+                duration: movie.duration,
+                language: movie.movieLanguage || 'English',
+                status: movie.status,
+                screens: screens,
+                showtimes: screens.flatMap((s: any) => (s.showGroups || []).flatMap((g: any) => g.showtimes || [])).slice(0, 3),
+                _hasAssignedShows: screens.length > 0
+              };
+            } catch (error) {
+              console.error(`Error fetching showtimes for movie ${movie._id}:`, error);
+              return {
+                _id: movie._id,
+                title: movie.title,
+                posterUrl: movie.posterUrl,
+                genre: Array.isArray(movie.genre) ? movie.genre.join('/') : (movie.genre || ''),
+                rating: movie.rating || 0,
+                duration: movie.duration,
+                language: movie.movieLanguage || 'English',
+                status: movie.status,
+                screens: [],
+                showtimes: [],
+                _hasAssignedShows: false
+              };
+            }
+          })
+        );
+
+        setMovies(moviesWithShowtimes);
+        setAllMovies(moviesWithShowtimes);
+      } catch (error) {
+        console.error('Error fetching movies:', error);
         setMovies([]);
         setAllMovies([]);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchAssignedNowShowing();
+    
+    fetchAllMoviesWithShowtimes();
   }, [city]);
 
   useEffect(() => {
@@ -122,7 +155,9 @@ const HomePage: React.FC = () => {
             <div className="flex items-center space-x-2">
               <span className="text-brand-red font-semibold">In {city}</span>
               <span className="text-gray-400">•</span>
-              <span className="text-gray-400 text-sm">{movies.length} movies available</span>
+              <span className="text-gray-400 text-sm">
+                {movies.filter(m => m._hasAssignedShows).length} movies with showtimes
+              </span>
             </div>
           </div>
           <button className="text-brand-red hover:text-red-400 transition-colors font-semibold">
@@ -131,9 +166,15 @@ const HomePage: React.FC = () => {
         </div>
         {isLoading ? (
           <div className="text-center text-gray-400 py-12">Loading movies…</div>
+        ) : movies.filter(movie => movie._hasAssignedShows).length === 0 ? (
+          <div className="text-center text-gray-400 py-12">
+            <div className="text-6xl mb-4">🎬</div>
+            <div className="text-xl mb-2">No movies with showtimes available</div>
+            <div className="text-sm">Check back later for new releases!</div>
+          </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {movies.map((movie) => (
+          {movies.filter(movie => movie._hasAssignedShows).map((movie) => (
               <div
                 key={movie._id}
                 className="group cursor-pointer"
@@ -152,13 +193,20 @@ const HomePage: React.FC = () => {
                   advanceBookingEnabled: movie.advanceBookingEnabled
                 }} />
                 <div className="mt-2 text-xs text-gray-400">
-                  <>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {(movie.showtimes || []).map((t: string, i: number) => (
-                        <span key={i} className="bg-brand-dark text-white px-2 py-0.5 rounded">{t}</span>
-                      ))}
-                    </div>
-                  </>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-green-400">●</span>
+                    <span>{movie.screens?.length || 0} Screen(s)</span>
+                    <span className="text-gray-500">•</span>
+                    <span>{movie.language}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(movie.showtimes || []).map((t: string, i: number) => (
+                      <span key={i} className="bg-brand-dark text-white px-2 py-0.5 rounded">{t}</span>
+                    ))}
+                    {movie.showtimes?.length === 0 && (
+                      <span className="text-gray-500 italic">No showtimes</span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

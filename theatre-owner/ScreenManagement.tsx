@@ -680,44 +680,44 @@ const ScreenManagement: React.FC = () => {
     
     // If no saved layout was found, fall back to original data
     if (!layoutLoaded) {
-      const selectedScreen = screens.find(s => s.id === screenId);
-      if (selectedScreen && selectedScreen.originalData) {
-        const screenData = selectedScreen.originalData;
+    const selectedScreen = screens.find(s => s.id === screenId);
+    if (selectedScreen && selectedScreen.originalData) {
+      const screenData = selectedScreen.originalData;
+      
+      // Load layout configuration from the screen data
+      if (screenData.rows && screenData.columns) {
+        const numRows = parseInt(screenData.rows);
+        const numCols = parseInt(screenData.columns);
+        const aisleCols: number[] = (screenData.aisleColumns || '')
+          .split(',')
+          .map((v: string) => parseInt(v.trim(), 10))
+          .filter((n: number) => !isNaN(n))
+          .sort((a: number, b: number) => a - b);
         
-        // Load layout configuration from the screen data
-        if (screenData.rows && screenData.columns) {
-          const numRows = parseInt(screenData.rows);
-          const numCols = parseInt(screenData.columns);
-          const aisleCols: number[] = (screenData.aisleColumns || '')
-            .split(',')
-            .map((v: string) => parseInt(v.trim(), 10))
-            .filter((n: number) => !isNaN(n))
-            .sort((a: number, b: number) => a - b);
-          
-          const seatClasses = (screenData.seatClasses || []).map((sc: any) => ({
-            rows: getRowRangeForSeatClass(sc.label, numRows),
-            className: sc.label,
-            price: parseInt(sc.price) || 200,
-            tier: getTierForSeatClass(sc.label),
-            color: getColorForSeatClass(sc.label)
-          }));
-          
-          setSeatConfig({
-            numRows,
-            numCols,
-            aisleColumns: aisleCols,
-            seatClassRules: seatClasses.length > 0 ? seatClasses : [
-              { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
-              { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
-              { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
-            ]
-          });
-          
-          setAisleInput(aisleCols.join(', '));
-          setHasUnsavedChanges(false);
-          setLayoutSaved(false);
-        }
+        const seatClasses = (screenData.seatClasses || []).map((sc: any) => ({
+          rows: getRowRangeForSeatClass(sc.label, numRows),
+          className: sc.label,
+          price: parseInt(sc.price) || 200,
+          tier: getTierForSeatClass(sc.label),
+          color: getColorForSeatClass(sc.label)
+        }));
+        
+        setSeatConfig({
+          numRows,
+          numCols,
+          aisleColumns: aisleCols,
+          seatClassRules: seatClasses.length > 0 ? seatClasses : [
+            { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
+            { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
+            { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
+          ]
+        });
+        
+        setAisleInput(aisleCols.join(', '));
+        setHasUnsavedChanges(false);
+        setLayoutSaved(false);
       }
+    }
     }
   };
 
@@ -1181,26 +1181,26 @@ const ScreenManagement: React.FC = () => {
                         <span>Refresh Layout</span>
                       </button>
                       
-                      <button
-                        onClick={() => {
-                          console.log('Save button clicked');
-                          saveScreenLayout();
-                        }}
-                        disabled={isSavingLayout || !selectedScreenId}
-                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
-                      >
-                        {isSavingLayout ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            <span>Saving...</span>
-                          </>
-                        ) : (
-                          <>
-                            <i className="fas fa-save"></i>
-                            <span>Save Layout</span>
-                          </>
-                        )}
-                      </button>
+                    <button
+                      onClick={() => {
+                        console.log('Save button clicked');
+                        saveScreenLayout();
+                      }}
+                      disabled={isSavingLayout || !selectedScreenId}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                    >
+                      {isSavingLayout ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-save"></i>
+                          <span>Save Layout</span>
+                        </>
+                      )}
+                    </button>
                     </div>
                   </div>
                 </div>

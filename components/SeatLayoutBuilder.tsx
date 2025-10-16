@@ -580,9 +580,9 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
       </div>
 
       <div
-        className="bg-gray-900 rounded-lg border border-gray-700 p-3 overflow-x-auto"
+        className="bg-gray-900 rounded-lg border border-gray-700 p-6 w-full"
         style={{
-          minHeight: 360,
+          minHeight: 480,
           // Subtle grid background for alignment guidance across the whole preview
           backgroundImage:
             'repeating-linear-gradient(0deg, rgba(148,163,184,0.08) 0px, rgba(148,163,184,0.08) 1px, transparent 1px, transparent 28px), repeating-linear-gradient(90deg, rgba(148,163,184,0.08) 0px, rgba(148,163,184,0.08) 1px, transparent 1px, transparent 28px)'
@@ -615,7 +615,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                       {tier.rowLabels.map((rowLabel, labelIndex) => (
                         <div 
                           key={rowLabel} 
-                          className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-800 dark:text-gray-200"
+                          className="w-6 h-6 flex items-center justify-center text-xs font-bold text-gray-800 dark:text-gray-200"
                           style={{ marginTop: `${labelIndex * 28}px` }}
                         >
                           {rowLabel}
@@ -677,7 +677,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                       })() ? (
                                         <button
                                           onClick={handleCellClickEdit(tierIndex, rowIdx, colIdx, cell.rowLabel, ruleColor)}
-                                          className="w-full h-full rounded border border-dashed text-[10px] text-gray-400 flex items-center justify-center"
+                                          className="w-full h-full rounded border border-dashed text-[9px] text-gray-400 flex items-center justify-center"
                                           style={{ borderColor: `${ruleColor}77`, backgroundColor: 'transparent' }}
                                           title={isActive ? "Add seat here" : "Restore deleted seat"}
                                         >
@@ -707,7 +707,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                             }
                                           }}
                                           title={cell.tooltip}
-                                        className={`w-full h-full rounded border text-[10px] text-gray-200 flex items-center justify-center transition-all duration-200 hover:scale-110 ${
+                                        className={`w-full h-full rounded border text-[9px] text-gray-200 flex items-center justify-center transition-all duration-200 hover:scale-110 ${
                                             isActive === false ? 'opacity-50' : ''
                                         } ${editMode ? 'cursor-move' : 'cursor-pointer'}`}
                                           style={{ 

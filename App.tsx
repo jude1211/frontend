@@ -29,6 +29,7 @@ import SnacksManagement from './theatre-owner/SnacksManagement';
 import TheatreOwnerReports from './pages/TheatreOwnerReports';
 import TheatreOwnerProfile from './pages/TheatreOwnerProfile';
 import DynamicMovieLanding from './pages/DynamicMovieLanding';
+import LiveSeatLayoutPage from './pages/LiveSeatLayoutPage';
 
 const App: React.FC = () => {
   return (
@@ -42,6 +43,7 @@ const App: React.FC = () => {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/live-movies" element={<DynamicMovieLanding />} />
                 <Route path="/movie/:id" element={<MovieDetailPage />} />
+                <Route path="/live-seats/:movieId/:screenId/:bookingDate/:showtime" element={<LiveSeatLayoutPage />} />
                 <Route path="/select-seats/:movieId/:screenId/:bookingDate/:time" element={<SeatSelectionPage />} />
                 <Route path="/snacks" element={<SnackOrderPage />} />
                 <Route path="/checkout" element={<CheckoutPage />} />

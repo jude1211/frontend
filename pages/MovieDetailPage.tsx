@@ -91,8 +91,8 @@ const MovieDetailPage: React.FC = () => {
   }, [id]);
 
   const handleShowtimeSelect = (screenId: string, bookingDate: string, time: string) => {
-    // You may want to pass bookingDate/time as params or state if needed
-    navigate(`/select-seats/${movie?.id}/${screenId}/${bookingDate}/${encodeURIComponent(time)}`);
+    // Navigate to live seat layout page
+    navigate(`/live-seats/${movie?.id}/${screenId}/${bookingDate}/${encodeURIComponent(time)}`);
   };
 
   if (loading) {
