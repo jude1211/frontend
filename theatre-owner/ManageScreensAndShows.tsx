@@ -25,6 +25,10 @@ const ManageScreensAndShows: React.FC = () => {
   const [editMovieId, setEditMovieId] = useState<string>('');
   const [editScreenId, setEditScreenId] = useState<string>('');
   const [editShowtimesInput, setEditShowtimesInput] = useState<string>('');
+  const [availableTimings, setAvailableTimings] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [loadingScreens, setLoadingScreens] = useState<boolean>(false);
+  const [screensError, setScreensError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -48,13 +52,35 @@ const ManageScreensAndShows: React.FC = () => {
         }
         if (!resolvedOwnerId) return;
 
+        setLoadingScreens(true);
+        setScreensError(null);
+
         const [moviesRes, screensRes] = await Promise.all([
           apiService.getTheatreOwnerMovies(resolvedOwnerId as string),
           apiService.getOwnerScreens(resolvedOwnerId as string)
         ]);
-        if (moviesRes.success) setOwnerMovies(moviesRes.data || []);
-        if (screensRes.success) setOwnerScreens(screensRes.data?.screens || []);
-      } catch {}
+        
+        if (moviesRes.success) {
+          setOwnerMovies(moviesRes.data || []);
+        } else {
+          console.error('Failed to load movies:', moviesRes.error);
+        }
+        
+        if (screensRes.success) {
+          setOwnerScreens(screensRes.data?.screens || []);
+        } else {
+          setScreensError(screensRes.error || 'Failed to load screens');
+          console.error('Failed to load screens:', screensRes.error);
+        }
+        
+        // Load available timings for today
+        loadAvailableTimings(resolvedOwnerId as string, selectedDate);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+        setScreensError('Failed to load data');
+      } finally {
+        setLoadingScreens(false);
+      }
     };
     load();
   }, []);
@@ -138,6 +164,53 @@ const ManageScreensAndShows: React.FC = () => {
 
   // Derived chips preview and time validation helper
   const plannedChips = showtimesInput.split(',').map(s => s.trim()).filter(Boolean);
+
+  const loadAvailableTimings = async (ownerId: string, date: string) => {
+    try {
+      const response = await apiService.getAvailableTimings(ownerId, date);
+      if (response.success) {
+        setAvailableTimings(response.data.allAvailable || []);
+      }
+    } catch (error) {
+      console.error('Failed to load available timings:', error);
+    }
+  };
+
+  const refreshScreens = async () => {
+    try {
+      const profile = await apiService.getTheatreOwnerProfile?.();
+      const ownerId = profile?.success ? (profile.data?.id || profile.data?._id) : null;
+      let resolvedOwnerId = ownerId;
+      if (!resolvedOwnerId) {
+        const ownerLocal = localStorage.getItem('theatreOwnerData');
+        if (ownerLocal) {
+          try { resolvedOwnerId = JSON.parse(ownerLocal)?._id || JSON.parse(ownerLocal)?.id; } catch {}
+        }
+      }
+      if (!resolvedOwnerId) {
+        const user = localStorage.getItem('user');
+        if (user) {
+          try { resolvedOwnerId = JSON.parse(user)?._id || JSON.parse(user)?.id; } catch {}
+        }
+      }
+      if (!resolvedOwnerId) return;
+
+      setLoadingScreens(true);
+      setScreensError(null);
+      
+      const screensRes = await apiService.getOwnerScreens(resolvedOwnerId as string);
+      if (screensRes.success) {
+        setOwnerScreens(screensRes.data?.screens || []);
+      } else {
+        setScreensError(screensRes.error || 'Failed to load screens');
+      }
+    } catch (error) {
+      console.error('Failed to refresh screens:', error);
+      setScreensError('Failed to refresh screens');
+    } finally {
+      setLoadingScreens(false);
+    }
+  };
 
   const parseAndValidateShowtimes = (raw: string): string[] | null => {
     const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
@@ -306,6 +379,28 @@ const ManageScreensAndShows: React.FC = () => {
       </header>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+          <div className="mb-4">
+            <label className="block text-sm text-gray-400 mb-2">Select Date for Show Assignment</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                // Reload timings for the new date
+                const profile = localStorage.getItem('theatreOwnerData');
+                if (profile) {
+                  try {
+                    const ownerId = JSON.parse(profile)?._id || JSON.parse(profile)?.id;
+                    if (ownerId) {
+                      loadAvailableTimings(ownerId, e.target.value);
+                    }
+                  } catch {}
+                }
+              }}
+              min={new Date().toISOString().split('T')[0]}
+              className="w-64 bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2"
+            />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">Movie</label>
@@ -399,13 +494,50 @@ const ManageScreensAndShows: React.FC = () => {
               })()}
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Screen</label>
-              <select value={selectedScreenId} onChange={(e)=>setSelectedScreenId(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2">
-                <option value="">Select a screen</option>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm text-gray-400">Screen</label>
+                <button
+                  onClick={refreshScreens}
+                  disabled={loadingScreens}
+                  className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                  title="Refresh screens"
+                >
+                  <i className={`fas fa-sync-alt ${loadingScreens ? 'animate-spin' : ''}`}></i>
+                </button>
+              </div>
+              <select 
+                value={selectedScreenId} 
+                onChange={(e)=>setSelectedScreenId(e.target.value)} 
+                disabled={loadingScreens}
+                className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2 disabled:opacity-60"
+              >
+                <option value="">
+                  {loadingScreens ? 'Loading screens...' : 'Select a screen'}
+                </option>
                 {ownerScreens.map((s:any)=> (
-                  <option key={s.screenNumber} value={String(s.screenNumber)}>Screen {s.screenNumber}</option>
+                  <option key={s.screenNumber} value={String(s.screenNumber)}>
+                    {s.name || `Screen ${s.screenNumber}`}
+                    {s.type && s.type !== '2D' && ` (${s.type})`}
+                  </option>
                 ))}
               </select>
+              {screensError && (
+                <div className="text-xs text-red-400 mt-2">
+                  {screensError}
+                  <button 
+                    onClick={refreshScreens} 
+                    className="text-blue-400 underline ml-1"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {!loadingScreens && !screensError && ownerScreens.length === 0 && (
+                <div className="text-xs text-gray-400 mt-2">
+                  No screens found. 
+                  <a href="#/theatre-owner/screens" className="text-red-400 underline ml-1">Add screens first</a>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Booking Date</label>
@@ -449,7 +581,38 @@ const ManageScreensAndShows: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Showtimes</label>
+              <div className="space-y-2">
               <input value={showtimesInput} onChange={(e)=>setShowtimesInput(e.target.value)} placeholder="e.g. 10:00 AM, 1:30 PM" className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2" />
+                {availableTimings.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs text-gray-400">Available timings for {selectedDate}:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {availableTimings.map((timing, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            const current = showtimesInput ? showtimesInput + ', ' : '';
+                            setShowtimesInput(current + timing);
+                          }}
+                          className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded"
+                        >
+                          {timing}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Click timings to add them, or type manually. 
+                      <a href="#/theatre-owner/show-timings" className="text-blue-400 underline ml-1">Manage timings</a>
+                    </div>
+                  </div>
+                )}
+                {availableTimings.length === 0 && (
+                  <div className="text-xs text-gray-500">
+                    No saved timings found. 
+                    <a href="#/theatre-owner/show-timings" className="text-blue-400 underline ml-1">Set up show timings first</a>
+                  </div>
+                )}
+              </div>
               {showtimeError && <div className="text-xs text-red-400 mt-1">{showtimeError}</div>}
               {plannedChips.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -528,8 +691,12 @@ const ManageScreensAndShows: React.FC = () => {
                         <div>
                           <label className="block text-xs text-gray-400 mb-1">Screen</label>
                           <select value={editScreenId} onChange={(e)=>setEditScreenId(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded px-2 py-1">
+                            <option value="">Select screen</option>
                             {ownerScreens.map((s:any)=> (
-                              <option key={s.screenNumber} value={String(s.screenNumber)}>Screen {s.screenNumber}</option>
+                              <option key={s.screenNumber} value={String(s.screenNumber)}>
+                                {s.name || `Screen ${s.screenNumber}`}
+                                {s.type && s.type !== '2D' && ` (${s.type})`}
+                              </option>
                             ))}
                           </select>
                         </div>
@@ -544,7 +711,7 @@ const ManageScreensAndShows: React.FC = () => {
                     ) : (
                       <>
                         <div className="flex items-center gap-2 mb-1">
-                        <div className="text-white font-medium truncate">{sh.movieId?.title || 'Movie'}</div>
+                    <div className="text-white font-medium truncate">{sh.movieId?.title || 'Movie'}</div>
                           {(() => {
                             const movie = ownerMovies.find(m => m._id === sh.movieId?._id || sh.movieId);
                             if (movie) {
@@ -604,10 +771,10 @@ const ManageScreensAndShows: React.FC = () => {
                           })()}
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {(sh.showtimes||[]).map((t:string, idx:number)=> (
-                            <span key={`${sh._id}-t-${idx}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-emerald-500/15 text-emerald-200 border border-emerald-400/30"><i className="fas fa-clock"></i>{t}</span>
-                          ))}
-                        </div>
+                      {(sh.showtimes||[]).map((t:string, idx:number)=> (
+                        <span key={`${sh._id}-t-${idx}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-emerald-500/15 text-emerald-200 border border-emerald-400/30"><i className="fas fa-clock"></i>{t}</span>
+                      ))}
+                    </div>
                       </>
                     )}
                   </div>
@@ -670,10 +837,10 @@ const ManageScreensAndShows: React.FC = () => {
                         setEditScreenId(String(sh.screenId || selectedScreenId || '1'));
                         setEditShowtimesInput(Array.isArray(sh.showtimes) ? sh.showtimes.join(', ') : '');
                       }} className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded">Edit</button>
-                      <button onClick={async()=>{
-                        const res = await apiService.deleteScreenShow(String(sh.screenId || selectedScreenId), sh._id);
-                        if (res.success) setShows(prev=>prev.filter(x=>x._id!==sh._id));
-                      }} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded">Delete</button>
+                <button onClick={async()=>{
+                  const res = await apiService.deleteScreenShow(String(sh.screenId || selectedScreenId), sh._id);
+                  if (res.success) setShows(prev=>prev.filter(x=>x._id!==sh._id));
+                }} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded">Delete</button>
                     </>
                   )}
                 </div>

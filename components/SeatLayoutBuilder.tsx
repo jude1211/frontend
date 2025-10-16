@@ -29,7 +29,7 @@ export interface SeatLayoutBuilderProps {
   onSeatPositionUpdate?: (seatId: string, x: number, y: number) => void;
   onSeatRestoration?: (seatId: string) => void;
   onManualLayoutChange?: (seatIdsByRow: string[][]) => void;
-  onSeatGridChange?: (grid: Array<Array<{ row: number; col: number; rowLabel: string; number: number; category?: string }>>) => void;
+  onSeatGridChange?: (grid: Array<Array<{ row: number; col: number; rowLabel: string; number: number; className?: string }>>) => void;
 }
 
 function getRowLabel(indexZeroBased: number): string {
@@ -73,24 +73,220 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
   onManualLayoutChange, 
   onSeatGridChange 
 }) => {
-  const { groups, legend, classByName } = useMemo(() => {
+  const { organizedTiers, legend, classByName } = React.useMemo(() => {
     const legendMap = new Map<string, SeatClassRule>();
     const classByNameMap = new Map<string, SeatClassRule>();
-    const classGroups: Array<{ rule: SeatClassRule; rows: any[][] }> = [];
+    
+    // If we have processed seats, restore the exact layout from saved data
+    if (processedSeats && processedSeats.size > 0) {
+      console.log('Restoring layout from processed seats:', processedSeats.size);
+      console.log('Sample processed seat:', Array.from(processedSeats.values())[0]);
+      console.log('Config seatClassRules:', config.seatClassRules);
+      
+      // Group seats by tier and row
+      const seatsByTier = new Map<string, Map<string, any[]>>();
+      
+      processedSeats.forEach((seat) => {
+        if (seat.isActive !== false) {
+          // Determine tier from seat class or use default
+          let tier = seat.tier;
+          if (!tier) {
+            // Try to determine tier from className or use default
+            if (seat.className?.toLowerCase().includes('vip') || seat.className?.toLowerCase().includes('balcony')) {
+              tier = 'VIP';
+            } else if (seat.className?.toLowerCase().includes('premium') || seat.className?.toLowerCase().includes('gold')) {
+              tier = 'Premium';
+            } else {
+              tier = 'Base';
+            }
+          }
+          
+          if (!seatsByTier.has(tier)) {
+            seatsByTier.set(tier, new Map());
+          }
+          if (!seatsByTier.get(tier)!.has(seat.rowLabel)) {
+            seatsByTier.get(tier)!.set(seat.rowLabel, []);
+          }
+          seatsByTier.get(tier)!.get(seat.rowLabel)!.push({
+            ...seat,
+            tier: tier
+          });
+        }
+      });
+      
+      // Also track deleted seats to avoid creating empty seats in their positions
+      const deletedSeats = new Set<string>();
+      processedSeats.forEach((seat) => {
+        if (seat.isActive === false) {
+          deletedSeats.add(`${seat.rowLabel}-${seat.number}`);
+        }
+      });
+      
+      // Organize by tier order
+      const tierOrder = ['VIP', 'Premium', 'Base'];
+      const organizedTiers: Array<{ 
+        tier: string; 
+        rule: SeatClassRule; 
+        rows: any[][]; 
+        rowLabels: string[];
+        startRowIndex: number;
+      }> = [];
+      
+      let currentRowIndex = 0;
+      
+      tierOrder.forEach(tier => {
+        const tierSeats = seatsByTier.get(tier);
+        if (tierSeats && tierSeats.size > 0) {
+          console.log(`Processing tier ${tier} with ${tierSeats.size} rows`);
+          // Find the rule for this tier
+          const rule = config.seatClassRules.find(r => r.tier === tier);
+          console.log(`Found rule for tier ${tier}:`, rule);
+          if (rule) {
+            legendMap.set(rule.className, rule);
+            classByNameMap.set(rule.className, rule);
+            
+            const rows: any[][] = [];
+            const rowLabels = Array.from(tierSeats.keys()).sort();
+            
+            rowLabels.forEach((rowLabel) => {
+              const seatsInRow = tierSeats.get(rowLabel) || [];
+              const totalVisualCols = config.numCols + config.aisleColumns.length;
+              const row: any[] = [];
+              
+              // Create a map of seat positions for this row based on seat numbers
+              const seatPositions = new Map<number, any>();
+              seatsInRow.forEach(seat => {
+                seatPositions.set(seat.number, seat);
+              });
+              
+              // Build the row with seats in correct positions
+              let seatCounter = 0;
+              for (let c = 1; c <= totalVisualCols; c++) {
+                if (config.aisleColumns.includes(c)) {
+                  row.push(null); // Aisle gap
+                } else {
+                  seatCounter++;
+                  if (seatPositions.has(seatCounter)) {
+                    const seat = seatPositions.get(seatCounter);
+                    row.push({
+                      ...seat,
+                      isEmpty: false,
+                      x: (c - 1) * 40,
+                      y: currentRowIndex * 40
+                    });
+                  } else {
+                    // Check if this seat was deleted - if so, don't create an empty seat
+                    const seatId = `${rowLabel}-${seatCounter}`;
+                    if (deletedSeats.has(seatId)) {
+                      // This seat was deleted, don't create an empty seat
+                      row.push(null);
+                    } else {
+                      // Empty seat position (never occupied)
+                      row.push({
+                        id: seatId,
+                        rowLabel,
+                        number: seatCounter,
+                        className: rule.className,
+                        price: rule.price,
+                        color: rule.color,
+                        tier: rule.tier,
+                        tooltip: `${rowLabel}${seatCounter} · ${rule.className} · ₹${rule.price} · ${rule.tier}`,
+                        isVip: rule.tier === 'VIP',
+                        status: 'available',
+                        isActive: true,
+                        x: (c - 1) * 40,
+                        y: currentRowIndex * 40,
+                        isEmpty: true
+                      });
+                    }
+                  }
+                }
+              }
+              
+              rows.push(row);
+            });
+            
+            organizedTiers.push({
+              tier: rule.tier,
+              rule,
+              rows,
+              rowLabels,
+              startRowIndex: currentRowIndex
+            });
+            
+            currentRowIndex += rows.length;
+          }
+        }
+      });
+      
+      console.log('Restored organizedTiers:', organizedTiers.length, 'tiers');
+      console.log('Sample restored tier:', organizedTiers[0]);
+      
+      if (organizedTiers.length === 0) {
+        console.log('WARNING: No organizedTiers created from processed seats, falling back to default');
+      }
+      
+      return { 
+        organizedTiers, 
+        legend: Array.from(legendMap.values()), 
+        classByName: classByNameMap 
+      };
+    }
+    
+    // Fallback to default layout generation if no processed seats
+    console.log('Falling back to default layout generation');
+    console.log('Processed seats available:', processedSeats?.size || 0);
+    console.log('Config:', config);
+    
+    // Organize seat classes by tier (Base → Premium → VIP)
+    const tierOrder = ['VIP', 'Premium', 'Base'];
+    const organizedTiers: Array<{ 
+      tier: string; 
+      rule: SeatClassRule; 
+      rows: any[][]; 
+      rowLabels: string[];
+      startRowIndex: number;
+    }> = [];
 
-    config.seatClassRules.forEach((rule) => {
+    // Sort rules by tier order
+    const sortedRules = [...config.seatClassRules].sort((a, b) => {
+      const aIndex = tierOrder.indexOf(a.tier);
+      const bIndex = tierOrder.indexOf(b.tier);
+      return aIndex - bIndex;
+    });
+
+    let currentRowIndex = 0;
+
+    sortedRules.forEach((rule) => {
       legendMap.set(rule.className, rule);
       classByNameMap.set(rule.className, rule);
-      const layout = rule.layout || { numRows: config.numRows, numCols: config.numCols, aisleColumns: config.aisleColumns };
+      
+      const layout = rule.layout || { 
+        numRows: config.numRows, 
+        numCols: config.numCols, 
+        aisleColumns: config.aisleColumns 
+      };
+      
+      // Parse the row ranges for this rule (e.g., "A-C", "D-F", "G-H")
+      const rowRanges = new Set<string>();
+      const parts = rule.rows.split(',');
+      for (const part of parts) {
+        const covered = parseRowRange(part);
+        covered.forEach(row => rowRanges.add(row));
+      }
+      
+      // Convert row ranges to sorted array
+      const rowLabels = Array.from(rowRanges).sort();
+      
       const rows: any[][] = [];
-      for (let r = 0; r < layout.numRows; r++) {
-        const rowLabel = getRowLabel(r);
+      rowLabels.forEach((rowLabel, localRowIndex) => {
         const totalVisualCols = layout.numCols + layout.aisleColumns.length;
         let seatCounter = 0;
         const row: any[] = [];
+        
         for (let c = 1; c <= totalVisualCols; c++) {
           if (layout.aisleColumns.includes(c)) {
-            row.push(null);
+            row.push(null); // Aisle gap
             continue;
           }
           seatCounter += 1;
@@ -113,98 +309,169 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
             isActive: isActive,
             status: seatStatus,
             x: processedSeat?.x || ((c - 1) * 40),
-            y: processedSeat?.y || (r * 40),
+            y: processedSeat?.y || ((currentRowIndex + localRowIndex) * 40),
             className: rule.className,
             price: rule.price,
-            color: rule.color
+            color: rule.color,
+            rowLabel: rowLabel
           });
         }
         rows.push(row);
-      }
-      classGroups.push({ rule, rows });
+      });
+      
+      organizedTiers.push({
+        tier: rule.tier,
+        rule,
+        rows,
+        rowLabels,
+        startRowIndex: currentRowIndex
+      });
+      
+      currentRowIndex += rows.length;
     });
 
-    return { groups: classGroups, legend: Array.from(legendMap.values()), classByName: classByNameMap };
-  }, [config]);
+    return { 
+      organizedTiers, 
+      legend: Array.from(legendMap.values()), 
+      classByName: classByNameMap 
+    };
+  }, [config, processedSeats]);
 
-  const [editableRowsByGroup, setEditableRowsByGroup] = React.useState<any[][][]>(groups.map(g => g.rows));
+  const [editableRowsByTier, setEditableRowsByTier] = React.useState<any[][][]>([]);
+  
   React.useEffect(() => {
-    setEditableRowsByGroup(groups.map(g => g.rows));
-  }, [groups]);
+    if (organizedTiers && Array.isArray(organizedTiers) && organizedTiers.length > 0) {
+      console.log('Updating editableRowsByTier with organizedTiers:', organizedTiers.length, 'tiers');
+      console.log('Sample organizedTier:', organizedTiers[0]);
+      const newEditableRows = organizedTiers.map(t => t.rows);
+      console.log('New editableRowsByTier:', newEditableRows.length, 'tiers');
+      setEditableRowsByTier(newEditableRows);
+    } else {
+      console.log('No organizedTiers to update editableRowsByTier');
+    }
+  }, [organizedTiers]);
 
-  const emitManual = (next: any[][]) => {
+  const emitManual = (tierIndex: number, next: any[][]) => {
+    console.log('emitManual called with', next.length, 'rows');
     const ids = next.map(r => r.map(cell => (cell && !cell.isEmpty ? cell.id : '')));
     onManualLayoutChange?.(ids);
     const grid = next.map((r, rIdx) => r.map((cell, cIdx) => {
-      const rowLabel = getRowLabel(rIdx);
       return {
         row: rIdx,
         col: cIdx,
-        rowLabel,
+        rowLabel: cell?.rowLabel || '',
         number: cell ? cell.number : 0,
-        category: cell && !cell.isEmpty ? (findSeatClassForRow(rowLabel, config.seatClassRules)?.className) : undefined,
+        className: cell && !cell.isEmpty ? (cell as any).className : undefined,
+        price: cell && !cell.isEmpty ? (cell as any).price : undefined,
+        color: cell && !cell.isEmpty ? (cell as any).color : undefined,
+        status: cell && !cell.isEmpty ? (cell as any).status : undefined,
+        isActive: cell && !cell.isEmpty ? (cell as any).isActive : undefined,
+        x: cell && !cell.isEmpty ? (cell as any).x : undefined,
+        y: cell && !cell.isEmpty ? (cell as any).y : undefined,
+        isEmpty: cell ? cell.isEmpty : true
       };
     }));
+    console.log('Emitting grid data:', grid.length, 'rows,', grid[0]?.length || 0, 'cols');
     onSeatGridChange?.(grid);
   };
 
   React.useEffect(() => {
     const flat: any[][] = [];
-    editableRowsByGroup.forEach(gr => gr.forEach(r => flat.push(r)));
-    emitManual(flat);
+    editableRowsByTier.forEach(tier => tier.forEach(r => flat.push(r)));
+    emitManual(0, flat);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editableRowsByGroup]);
+  }, [editableRowsByTier]);
 
-  const [dragFrom, setDragFrom] = React.useState<{ g: number; r: number; c: number } | null>(null);
+  const [dragFrom, setDragFrom] = React.useState<{ tierIndex: number; r: number; c: number } | null>(null);
   const [hoverTarget, setHoverTarget] = React.useState<{ r: number; c: number } | null>(null);
-  const onDragStart = (g: number, r: number, c: number) => (e: React.DragEvent) => {
+  const [pendingPositionUpdates, setPendingPositionUpdates] = React.useState<Array<{seatId: string, newX: number, newY: number}>>([]);
+  
+  const onDragStart = (tierIndex: number, r: number, c: number) => (e: React.DragEvent) => {
+    console.log('Drag started:', { tierIndex, r, c, editMode });
+    
+    if (!editMode) {
+      e.preventDefault();
+      return;
+    }
+    
     // Some browsers require data to start a drag operation
-    try { e.dataTransfer.setData('text/plain', `${g},${r},${c}`); } catch {}
+    try { e.dataTransfer.setData('text/plain', `${tierIndex},${r},${c}`); } catch {}
     e.dataTransfer.effectAllowed = 'move';
-    setDragFrom({ g, r, c });
+    setDragFrom({ tierIndex, r, c });
   };
+  
   const onDragOver = (toR: number, toC: number) => (e: React.DragEvent) => {
     e.preventDefault();
     setHoverTarget({ r: toR, c: toC });
   };
+  
   const onDragLeave = () => setHoverTarget(null);
-  const onDrop = (toG: number, toR: number, toC: number) => (e: React.DragEvent) => {
+  
+  const onDrop = (tierIndex: number, toR: number, toC: number) => (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!dragFrom) return;
-    setEditableRowsByGroup((prev) => {
-      const next = prev.map(group => group.map(row => row.slice()));
-      const a = next[dragFrom.g][dragFrom.r][dragFrom.c];
-      const b = next[toG][toR][toC];
+    console.log('Drop event:', { tierIndex, toR, toC, dragFrom, editMode });
+    
+    if (!dragFrom || !editMode) return;
+    
+    setEditableRowsByTier((prev) => {
+      const next = prev.map(tier => tier.map(row => row.slice()));
+      const a = next[dragFrom.tierIndex][dragFrom.r][dragFrom.c];
+      const b = next[tierIndex][toR][toC];
+      
+      console.log('Drop data:', { a, b, isEmpty: b?.isEmpty });
+      
       // Prevent dropping into aisles; only snap to valid grid blocks
       if (a === null || b === null) return prev;
+      
       if (b.isEmpty) {
         // move into empty block
         const placeholder = { ...b };
-        next[toG][toR][toC] = a;
-        next[dragFrom.g][dragFrom.r][dragFrom.c] = placeholder;
         
-        // Update position in processed seats
-        if (a.id && onSeatPositionUpdate) {
-          const newX = (toC * 40); // Calculate new X position
-          const newY = (toR * 40); // Calculate new Y position
-          onSeatPositionUpdate(a.id, newX, newY);
+        // Update the seat's number to match its new position
+        const updatedSeat = {
+          ...a,
+          number: b.number, // Use the target cell's number
+          id: `${a.rowLabel}-${b.number}`, // Update the ID
+          tooltip: `${a.rowLabel}${b.number} · ${a.className} · ₹${a.price} · ${a.tier || 'Base'}`
+        };
+        
+        console.log('Updated seat (drag):', { 
+          oldId: a.id, 
+          newId: updatedSeat.id, 
+          oldNumber: a.number, 
+          newNumber: updatedSeat.number,
+          position: { row: toR, col: toC }
+        });
+        
+        next[tierIndex][toR][toC] = updatedSeat;
+        next[dragFrom.tierIndex][dragFrom.r][dragFrom.c] = placeholder;
+        
+        // Queue position update
+        const updates: Array<{seatId: string, newX: number, newY: number}> = [];
+        if (updatedSeat.id) {
+          updates.push({ seatId: updatedSeat.id, newX: toC * 40, newY: toR * 40 });
+        }
+        if (updates.length > 0) {
+          setPendingPositionUpdates(updates);
         }
       } else {
         // swap seats
-        next[dragFrom.g][dragFrom.r][dragFrom.c] = b;
-        next[toG][toR][toC] = a;
+        next[dragFrom.tierIndex][dragFrom.r][dragFrom.c] = b;
+        next[tierIndex][toR][toC] = a;
         
-        // Update positions for both seats
-        if (a.id && onSeatPositionUpdate) {
-          const newX = (toC * 40);
-          const newY = (toR * 40);
-          onSeatPositionUpdate(a.id, newX, newY);
+        console.log('Swapped seats');
+        
+        // Queue position updates for both seats
+        const updates: Array<{seatId: string, newX: number, newY: number}> = [];
+        if (a.id) {
+          updates.push({ seatId: a.id, newX: toC * 40, newY: toR * 40 });
         }
-        if (b.id && onSeatPositionUpdate) {
-          const newX = (dragFrom.c * 40);
-          const newY = (dragFrom.r * 40);
-          onSeatPositionUpdate(b.id, newX, newY);
+        if (b.id) {
+          updates.push({ seatId: b.id, newX: dragFrom.c * 40, newY: dragFrom.r * 40 });
+        }
+        if (updates.length > 0) {
+          setPendingPositionUpdates(updates);
         }
       }
       return next;
@@ -212,43 +479,61 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
     setDragFrom(null);
     setHoverTarget(null);
   };
-  const onDragEnd = () => setHoverTarget(null);
+  
+  const onDragEnd = () => {
+    setDragFrom(null);
+    setHoverTarget(null);
+  };
 
-  const handleCellClickEdit = (g: number, r: number, c: number, rowLabel: string, ruleColor: string) => (e?: React.MouseEvent) => {
+  // Handle pending position updates after state changes
+  React.useEffect(() => {
+    if (pendingPositionUpdates.length > 0 && onSeatPositionUpdate) {
+      pendingPositionUpdates.forEach(({ seatId, newX, newY }) => {
+        onSeatPositionUpdate(seatId, newX, newY);
+      });
+      setPendingPositionUpdates([]);
+    }
+  }, [pendingPositionUpdates, onSeatPositionUpdate]);
+
+  const handleCellClickEdit = (tierIndex: number, r: number, c: number, rowLabel: string, ruleColor: string) => (e?: React.MouseEvent) => {
     if (!editMode) return;
-    setEditableRowsByGroup(prev => {
-      const next = prev.map(group => group.map(row => row.slice()));
-      const cell = next[g][r][c];
+    setEditableRowsByTier(prev => {
+      const next = prev.map(tier => tier.map(row => row.slice()));
+      const cell = next[tierIndex][r][c];
       if (cell === null) return prev; // aisle
       if (cell.isEmpty) {
-        // add seat using the row's current class rule (Gold/Silver/Balcony)
-        const classRule = config.seatClassRules[g];
+        // add seat using the tier's class rule
+        const classRule = organizedTiers[tierIndex]?.rule;
         const seatId = `${rowLabel}-${cell.number}`;
-        next[g][r][c] = {
+        next[tierIndex][r][c] = {
           id: seatId,
           number: cell.number,
           tooltip: `${rowLabel}${cell.number} · ${classRule ? classRule.className : 'Standard'} · ₹${classRule ? classRule.price : 0} · ${classRule ? classRule.tier : 'Base'}`,
           isReserved: false,
           isVIP: classRule?.tier === 'VIP',
           isEmpty: false,
+          rowLabel: rowLabel,
+          className: classRule?.className,
+          price: classRule?.price,
+          color: classRule?.color
         };
       } else if (e && (e.ctrlKey || e.altKey || e.shiftKey)) {
         // quick delete with modifier key
-        next[g][r][c] = { ...cell, id: '', tooltip: '', isReserved: false, isVIP: false, isEmpty: true };
+        next[tierIndex][r][c] = { ...cell, id: '', tooltip: '', isReserved: false, isVIP: false, isEmpty: true };
       }
       return next;
     });
   };
 
-  const deleteSeatAt = (g: number, r: number, c: number) => (e: React.MouseEvent) => {
+  const deleteSeatAt = (tierIndex: number, r: number, c: number) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!editMode) return;
-    setEditableRowsByGroup(prev => {
-      const next = prev.map(group => group.map(row => row.slice()));
-      const cell = next[g][r][c];
+    setEditableRowsByTier(prev => {
+      const next = prev.map(tier => tier.map(row => row.slice()));
+      const cell = next[tierIndex][r][c];
       if (!cell || cell === null) return prev;
-      next[g][r][c] = { ...cell, id: '', tooltip: '', isReserved: false, isVIP: false, isEmpty: true };
+      next[tierIndex][r][c] = { ...cell, id: '', tooltip: '', isReserved: false, isVIP: false, isEmpty: true };
       return next;
     });
   };
@@ -287,61 +572,79 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
             'repeating-linear-gradient(0deg, rgba(148,163,184,0.08) 0px, rgba(148,163,184,0.08) 1px, transparent 1px, transparent 28px), repeating-linear-gradient(90deg, rgba(148,163,184,0.08) 0px, rgba(148,163,184,0.08) 1px, transparent 1px, transparent 28px)'
         }}
       >
-        <div className="space-y-6">
-          {groups
-            .filter((g) => !!g.rule && ['Base', 'Premium', 'VIP'].includes(g.rule!.tier))
-            .map((g, idx) => {
-            const header = g.rule ? `${g.rule.className}` : 'Standard';
-            const price = g.rule ? `₹${g.rule.price}` : '';
-            const tier = g.rule ? g.rule.tier : '';
-              const slice = (editMode ? editableRowsByGroup[idx] : g.rows);
+        <div className="space-y-4">
+          {organizedTiers.map((tier, tierIndex) => {
+            const header = tier.rule.className;
+            const price = `₹${tier.rule.price}`;
+            const tierName = tier.rule.tier;
+            const slice = editMode ? (editableRowsByTier[tierIndex] || tier.rows) : tier.rows;
+            
             return (
-              <div key={`${header}-${idx}`}>
-                <div className="text-center text-xs md:text-sm text-gray-300 mb-2">
-                  <span className="font-semibold">{price}</span>
-                  {price && ' '}
-                  <span className="uppercase tracking-wide">{header}</span>
-                  {tier && <span className="text-gray-500"> · {tier}</span>}
+              <div key={`${header}-${tierIndex}`} className="relative">
+                {/* Tier Header */}
+                <div className="text-center mb-2">
+                  <div className="inline-flex items-center space-x-3 px-4 py-2 rounded-lg bg-gray-800 border border-gray-600">
+                    <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: tier.rule.color }}></span>
+                    <span className="text-sm font-semibold text-gray-200">{price}</span>
+                    <span className="text-sm uppercase tracking-wide text-gray-300">{header}</span>
+                    <span className="text-xs text-gray-500">{tierName}</span>
+                  </div>
                 </div>
-                  {editMode ? (
+
+                {/* Screen Section */}
                     <div className="flex justify-center">
-                      <div>
-                        {slice.map((row, rowIdx) => (
+                  <div className="relative">
+                    {/* Row Labels (Left Side) - Cinema Style - Only show labels for this tier's rows */}
+                    <div className="absolute -left-8 top-0 flex flex-col">
+                      {tier.rowLabels.map((rowLabel, labelIndex) => (
+                        <div 
+                          key={rowLabel} 
+                          className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-800 dark:text-gray-200"
+                          style={{ marginTop: `${labelIndex * 28}px` }}
+                        >
+                          {rowLabel}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Seating Grid */}
+                    <div className="ml-2">
+                      {slice && Array.isArray(slice) ? slice.map((row, rowIdx) => (
                           <div key={rowIdx} className="flex items-center mb-1">
-                            <div className="w-6 text-right pr-2 text-xs text-gray-400">{getRowLabel(rowIdx)}</div>
                             <div className="flex">
-                              {row.map((cell, colIdx) => {
-                                const globalR = rowIdx;
-                                const globalC = colIdx;
-                                const isHover = hoverTarget && hoverTarget.r === globalR && hoverTarget.c === globalC;
+                            {row && Array.isArray(row) ? row.map((cell, colIdx) => {
+                              const isHover = hoverTarget && hoverTarget.r === rowIdx && hoverTarget.c === colIdx;
+                              
                                 if (cell === null) {
                                   // Aisle: reserved gap, not interactive
                                   return <div key={colIdx} className="w-6 h-6 mx-0.5 opacity-20"></div>;
                                 }
-                                const ruleColor = g.rule?.color || '#22c55e';
-                                // Merge any processed overrides for this seat id
-                                const seatId = row[rowIdx]?.id || `${getRowLabel(globalR)}-${(row[colIdx]?.number||0)}`;
+                              
+                              const ruleColor = tier.rule.color;
+                              const seatId = cell.id || `${cell.rowLabel}-${cell.number}`;
                                 const processedSeat = processedSeats?.get(seatId);
                                 const isActive = processedSeat?.isActive !== false;
                                 const seatStatus = processedSeat?.status || 'available';
+                              
                                 return (
                                   <div
                                     key={colIdx}
-                                    onDragOver={onDragOver(globalR, globalC)}
+                                  onDragOver={onDragOver(rowIdx, colIdx)}
                                     onDragLeave={onDragLeave}
-                                    onDrop={onDrop(idx, globalR, globalC)}
+                                  onDrop={onDrop(tierIndex, rowIdx, colIdx)}
                                     className={`w-6 h-6 mx-0.5 rounded relative group`}
                                   >
-                                    {/* placeholder highlight for snap block */}
-                                    {isHover && (
+                                  {/* Hover highlight */}
+                                  {isHover && editMode && dragFrom && (
                                       <div
                                         className="absolute inset-0 rounded"
                                         style={{ outline: `2px dashed ${ruleColor}AA`, outlineOffset: -2 }}
                                       />
                                     )}
+                                  
                                     {cell.isEmpty ? (
                                       <button
-                                        onClick={handleCellClickEdit(idx, globalR, globalC, getRowLabel(globalR), ruleColor)}
+                                      onClick={handleCellClickEdit(tierIndex, rowIdx, colIdx, cell.rowLabel, ruleColor)}
                                         className="w-full h-full rounded border border-dashed text-[10px] text-gray-400 flex items-center justify-center"
                                         style={{ borderColor: `${ruleColor}77`, backgroundColor: 'transparent' }}
                                         title="Add seat here"
@@ -351,10 +654,14 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                     ) : (
                                       <>
                                         <button
-                                          draggable
-                                          onDragStart={onDragStart(idx, globalR, globalC)}
+                                        draggable={editMode}
+                                        onDragStart={onDragStart(tierIndex, rowIdx, colIdx)}
                                           onDragEnd={onDragEnd}
-                                          onClick={handleCellClickEdit(idx, globalR, globalC, getRowLabel(globalR), ruleColor)}
+                                        onClick={() => onSeatClick?.(cell.id, { 
+                                          rowLabel: cell.rowLabel, 
+                                          columnNumber: cell.number, 
+                                          seatClass: tier.rule 
+                                        })}
                                           onContextMenu={(e) => {
                                             e.preventDefault();
                                             if (isActive === false) {
@@ -364,9 +671,9 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                             }
                                           }}
                                           title={cell.tooltip}
-                                          className={`w-full h-full rounded border text-[10px] text-gray-200 flex items-center justify-center ${
+                                        className={`w-full h-full rounded border text-[10px] text-gray-200 flex items-center justify-center transition-all duration-200 hover:scale-110 ${
                                             isActive === false ? 'opacity-50' : ''
-                                          }`}
+                                        } ${editMode ? 'cursor-move' : 'cursor-pointer'}`}
                                           style={{ 
                                             backgroundColor: isActive === false ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)', 
                                             borderColor: isActive === false ? '#ef4444' : ruleColor, 
@@ -375,24 +682,26 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                         >
                                           {cell.number}
                                         </button>
-                                        {isActive !== false && (
+                                      
+                                      {isActive !== false && editMode && (
                                           <button
                                             aria-label="Delete seat"
-                                            className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-600 text-white text-[9px] leading-3 hidden group-hover:flex items-center justify-center"
+                                          className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-600 text-white text-[9px] leading-3 hidden group-hover:flex items-center justify-center hover:bg-red-700 transition-colors"
                                             style={{ zIndex: 10 as any }}
                                             onClick={(e) => {
                                               e.preventDefault();
                                               e.stopPropagation();
-                                              onSeatDeletion?.(cell.id);
+                                            deleteSeatAt(tierIndex, rowIdx, colIdx)(e);
                                             }}
                                           >
                                             ×
                                           </button>
                                         )}
-                                        {isActive === false && (
+                                      
+                                      {isActive === false && editMode && (
                                           <button
                                             aria-label="Restore seat"
-                                            className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-green-600 text-white text-[9px] leading-3 hidden group-hover:flex items-center justify-center"
+                                          className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-green-600 text-white text-[9px] leading-3 hidden group-hover:flex items-center justify-center hover:bg-green-700 transition-colors"
                                             style={{ zIndex: 10 as any }}
                                             onClick={(e) => {
                                               e.preventDefault();
@@ -407,56 +716,21 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                     )}
                                   </div>
                                 );
-                              })}
+                            }) : null}
+                          </div>
+                      </div>
+                      )) : null}
+                    </div>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-center">
-                      <div>
-                        {slice.map((row, rowIdx) => (
-                          <div key={rowIdx} className="flex items-center mb-1">
-                            <div className="w-6 text-right pr-2 text-xs text-gray-400">{getRowLabel(rowIdx)}</div>
-                            <div className="flex">
-                              {row.map((cell, colIdx) => {
-                                const globalR = rowIdx;
-                                const globalC = colIdx;
-                                if (cell === null) {
-                                  return <div key={colIdx} className="w-6 h-6 mx-0.5"></div>;
-                                }
-                                const ruleColor = g.rule?.color || '#22c55e';
-                                const rowLabel = getRowLabel(globalR);
-                                const seatClass = config.seatClassRules[idx];
-                                return (
-                                  <button
-                                    key={colIdx}
-                                    onClick={() => onSeatClick?.(cell.id, { rowLabel, columnNumber: cell.number, seatClass })}
-                                    title={cell.tooltip}
-                                    className={`w-6 h-6 mx-0.5 rounded border text-[10px] text-gray-200 flex items-center justify-center ${
-                                      cell.isActive === false ? 'opacity-50' : ''
-                                    }`}
-                                    style={{ 
-                                      backgroundColor: cell.isActive === false ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)', 
-                                      borderColor: cell.isActive === false ? '#ef4444' : ruleColor, 
-                                      borderWidth: 2 as any 
-                                    }}
-                                  >
-                                    {cell.number}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+
               </div>
             );
           })}
-          <div className="mt-2 flex justify-center">
+          
+          
+          {/* Screen Display */}
+          <div className="mt-8 flex justify-center">
             <div className="w-64 h-3 bg-gradient-to-b from-blue-200 to-blue-300 rounded-b-2xl opacity-70"></div>
           </div>
         </div>

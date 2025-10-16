@@ -672,9 +672,24 @@ class ApiService {
     });
   }
 
-  async getScreenLayout(screenId: string): Promise<ApiResponse<any>> {
+  async updateScreenLayout(screenId: string, layoutData: any): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
     return this.makeRequest<any>(`/screens/${screenId}/layout`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(layoutData)
+    });
+  }
+
+  async getScreenLayout(screenId: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    // Add timestamp to prevent caching
+    const timestamp = Date.now();
+    return this.makeRequest<any>(`/screens/${screenId}/layout?t=${timestamp}`, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -695,6 +710,24 @@ class ApiService {
     const token = localStorage.getItem('theatreOwnerToken');
     return this.makeRequest<{ screenCount: number; screens: any[] }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload || {})
+    });
+  }
+
+  async updateScreenConfiguration(ownerId: string, screenNumber: string, payload: { 
+    rows?: string; 
+    columns?: string; 
+    aisleColumns?: string; 
+    seatClasses?: Array<{ label: string; price: string }>; 
+    seatingCapacity?: string; 
+  }): Promise<ApiResponse<{ message: string; screen: any }>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<{ message: string; screen: any }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenNumber)}`, {
+      method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -746,6 +779,83 @@ class ApiService {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ enabled })
+    });
+  }
+
+  // Show Timings Management APIs
+  async getShowTimings(ownerId: string): Promise<ApiResponse<any[]>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any[]>(`/show-timings/owner/${encodeURIComponent(ownerId)}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  async getAvailableTimings(ownerId: string, date: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/available/${encodeURIComponent(date)}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
+  async saveWeekdayTimings(ownerId: string, timings: string[]): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekday`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ timings })
+    });
+  }
+
+  async saveWeekendTimings(ownerId: string, timings: string[]): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekend`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ timings })
+    });
+  }
+
+  async createSpecialTiming(ownerId: string, timings: string[], specialDate: string, description?: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/special`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ timings, specialDate, description })
+    });
+  }
+
+  async updateSpecialTiming(timingId: string, timings: string[], description?: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ timings, description })
+    });
+  }
+
+  async deleteSpecialTiming(timingId: string): Promise<ApiResponse<any>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
     });
   }
 }

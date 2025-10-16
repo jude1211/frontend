@@ -199,18 +199,18 @@ const TheatreOwnerSignupPage: React.FC = () => {
       for (let i = 1; i <= screenCount; i++) {
         newScreens.push({
           screenNumber: i,
-          seatingCapacity: '',
-          seatLayout: '',
-          baseTicketPrice: '',
-          premiumPrice: '',
-          vipPrice: '',
+          seatingCapacity: '0', // Will be auto-calculated when rows/columns are entered
+          seatLayout: 'Standard (Rows A-Z)',
+          baseTicketPrice: '200',
+          premiumPrice: '300',
+          vipPrice: '500',
           rows: '',
           columns: '',
           aisleColumns: '',
           seatClasses: [
-            { label: 'Gold', price: '' },
-            { label: 'Silver', price: '' },
-            { label: 'Balcony', price: '' }
+            { label: 'Gold', price: '250' },
+            { label: 'Silver', price: '180' },
+            { label: 'Balcony', price: '320' }
           ],
           seatingLayoutFiles: [],
           ticketPricingFiles: []
@@ -221,7 +221,7 @@ const TheatreOwnerSignupPage: React.FC = () => {
         ...prev,
         screenCount: value,
         screens: newScreens,
-        seatingCapacity: newScreens.reduce((total, screen) => total + (parseInt(screen.seatingCapacity) || 0), 0).toString()
+        seatingCapacity: '0' // Will be auto-calculated when screen details are filled
       }));
     } else {
       setFormData(prev => ({
@@ -257,26 +257,26 @@ const TheatreOwnerSignupPage: React.FC = () => {
         [field]: value
       };
       
+      // Auto-generate individual screen seating capacity when rows or columns change
+      if (field === 'rows' || field === 'columns') {
+        const rows = parseInt(newScreens[screenIndex].rows || '0');
+        const cols = parseInt(newScreens[screenIndex].columns || '0');
+        if (rows > 0 && cols > 0) {
+          // Auto-calculate seating capacity: rows * columns
+          newScreens[screenIndex].seatingCapacity = (rows * cols).toString();
+        }
+      }
+      
       // Update total seating capacity
       const totalCapacity = newScreens.reduce((total, screen) => {
-        // If rows/columns provided, prefer rows*columns minus aisles as rough capacity; fallback to manual seatingCapacity
+        // If rows/columns provided, use rows*columns as capacity; aisles are just visual gaps
         const rows = parseInt(screen.rows || '0');
         const cols = parseInt(screen.columns || '0');
         let base = 0;
         if (rows > 0 && cols > 0) {
+          // Total capacity is simply rows * columns
+          // Aisles are visual gaps and don't reduce actual seat capacity
           base = rows * cols;
-          if (screen.aisleColumns) {
-            try {
-              const aisleCount = screen.aisleColumns
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean).length;
-              // Roughly subtract aisles across all rows
-              base = Math.max(0, base - (aisleCount * rows));
-            } catch (_) {
-              // ignore parsing errors
-            }
-          }
         } else {
           base = parseInt(screen.seatingCapacity) || 0;
         }
@@ -957,14 +957,18 @@ const TheatreOwnerSignupPage: React.FC = () => {
                               <p className="text-brand-light-gray text-xs mt-1">Specify column numbers to leave empty as aisles</p>
                             </div>
                             <div>
-                              <label className="block text-white text-sm mb-2">Seating Capacity *</label>
+                              <label className="block text-white text-sm mb-2">
+                                Seating Capacity * 
+                                <span className="text-xs text-green-400 ml-1">(Auto-generated)</span>
+                              </label>
                               <input
                                 type="number"
                                 value={screen.seatingCapacity}
-                                onChange={(e) => handleScreenChange(index, 'seatingCapacity', e.target.value)}
+                                readOnly
                                 placeholder="e.g., 150"
                                 min="1"
-                                className="w-full px-3 py-2 bg-brand-dark border border-brand-dark/30 rounded-lg text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red"
+                                className="w-full px-3 py-2 bg-brand-dark/50 border border-brand-dark/30 rounded-lg text-white placeholder-brand-light-gray cursor-not-allowed opacity-75"
+                                title="Seating capacity is automatically calculated from rows × columns"
                               />
                             </div>
                             <div>

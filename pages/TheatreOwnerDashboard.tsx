@@ -228,6 +228,13 @@ const TheatreOwnerDashboard: React.FC = () => {
                 <span>Show Management</span>
               </button>
               <button 
+                onClick={() => navigate('/theatre-owner/show-timings')}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
+              >
+                <i className="fas fa-clock text-xl"></i>
+                <span>Manage Show Timings</span>
+              </button>
+              <button 
                 onClick={() => navigate('/theatre-owner/screens')}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3"
               >
@@ -315,6 +322,10 @@ const TheatreOwnerDashboard: React.FC = () => {
               <button onClick={() => navigate('/theatre-owner/screens')} className="bg-gray-700 rounded-lg p-4 text-left hover:bg-gray-600 transition">
                 <h3 className="text-white font-semibold mb-2">Seat Configuration</h3>
                 <p className="text-gray-400 text-sm">Configure seating layouts and pricing tiers</p>
+              </button>
+              <button onClick={() => navigate('/theatre-owner/show-timings')} className="bg-gray-700 rounded-lg p-4 text-left hover:bg-gray-600 transition">
+                <h3 className="text-white font-semibold mb-2">Show Timings</h3>
+                <p className="text-gray-400 text-sm">Manage weekday, weekend, and special showtimes</p>
               </button>
             </div>
           </div>

@@ -12,6 +12,7 @@ interface Screen {
   currentMovie: string;
   nextShowtime: string;
   occupancy: number;
+  originalData?: any; // Store original database data
 }
 
 const ScreenManagement: React.FC = () => {
@@ -30,6 +31,7 @@ const ScreenManagement: React.FC = () => {
   const [selectedSeatInfo, setSelectedSeatInfo] = useState<{ id: string; rowLabel: string; columnNumber: number; seatClass?: SeatClassRule } | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [seatStats, setSeatStats] = useState<{ total: number; byClass: Record<string, number> }>({ total: 0, byClass: {} });
+  const [currentGridData, setCurrentGridData] = useState<any[]>([]);
   const [aisleInput, setAisleInput] = useState<string>('5, 9');
   const [aisleError, setAisleError] = useState<boolean>(false);
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
@@ -37,6 +39,29 @@ const ScreenManagement: React.FC = () => {
   const [layoutSaved, setLayoutSaved] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [processedSeats, setProcessedSeats] = useState<Map<string, any>>(new Map());
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  // Show toast notification
+  const showToastMessage = (message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
+  // Refresh layout from database
+  const refreshLayout = async () => {
+    if (!selectedScreenId) return;
+    
+    console.log('Manually refreshing layout from database...');
+    const success = await loadScreenLayout(selectedScreenId);
+    if (success) {
+      showToastMessage('Layout refreshed from database successfully!');
+    } else {
+      showToastMessage('Failed to refresh layout from database');
+    }
+  };
+
   const updateRuleLayout = (idx: number, patch: Partial<{ numRows: number; numCols: number; aisleColumns: number[] }>) => {
     setSeatConfig(prev => {
       const rules = prev.seatClassRules.slice();
@@ -90,14 +115,24 @@ const ScreenManagement: React.FC = () => {
     setHasUnsavedChanges(true);
   };
 
-  // Load saved layout for a screen
-  const loadScreenLayout = async (screenId: string) => {
+  // Load saved layout for a screen (always fetches fresh data)
+  const loadScreenLayout = async (screenId: string): Promise<boolean> => {
     try {
       setIsLoading(true);
+      console.log('Loading fresh screen layout for screenId:', screenId);
+      
+      // Always fetch fresh data from database
       const response = await apiService.getScreenLayout(screenId);
+      console.log('Fresh screen layout API response:', response);
       
       if (response.success && response.data) {
         const layout = response.data;
+        console.log('Found saved layout in database:', {
+          screenId: layout.screenId,
+          seatsCount: layout.seats?.length || 0,
+          meta: layout.meta,
+          seatClasses: layout.seatClasses?.length || 0
+        });
         
         // Restore the exact configuration
         setSeatConfig({
@@ -121,22 +156,29 @@ const ScreenManagement: React.FC = () => {
         
         // Store the complete seat data for rendering
         if (layout.seats && layout.seats.length > 0) {
+          console.log('Found saved seats in layout:', layout.seats.length);
+          console.log('Sample saved seat:', layout.seats[0]);
           // Process saved seats to restore exact layout
           processSavedSeats(layout.seats);
+        } else {
+          console.log('No saved seats found in layout');
         }
         
         setLayoutSaved(true);
         setHasUnsavedChanges(false);
+        return true; // Layout was successfully loaded
       } else {
         // No saved layout, use defaults
         setLayoutSaved(false);
         setHasUnsavedChanges(false);
+        return false; // No layout found
       }
     } catch (error) {
       console.error('Error loading screen layout:', error);
       // On error, use default configuration
       setLayoutSaved(false);
       setHasUnsavedChanges(false);
+      return false; // Error loading layout
     } finally {
       setIsLoading(false);
     }
@@ -144,13 +186,33 @@ const ScreenManagement: React.FC = () => {
 
   // Process saved seats to restore exact layout including positions and deletions
   const processSavedSeats = (savedSeats: any[]) => {
+    console.log('Processing saved seats:', savedSeats.length);
+    console.log('Sample saved seats:', savedSeats.slice(0, 3));
+    
     const seatsById = new Map<string, any>();
+    let activeSeats = 0;
+    let deletedSeats = 0;
+    
     savedSeats.forEach((seat) => {
       const key = `${seat.rowLabel}-${seat.number}`;
       seatsById.set(key, seat); // include inactive seats so they stay hidden
+      
+      if (seat.isActive === false) {
+        deletedSeats++;
+      } else {
+        activeSeats++;
+      }
     });
-    console.log('Loaded seats from DB:', savedSeats.length, 'mapped:', seatsById.size);
+    
+    console.log('Loaded seats from DB:', {
+      total: savedSeats.length,
+      active: activeSeats,
+      deleted: deletedSeats,
+      mapped: seatsById.size
+    });
+    console.log('Setting processedSeats state...');
     setProcessedSeats(seatsById);
+    console.log('processedSeats state set with', seatsById.size, 'seats');
   };
 
   // Save current layout for a screen
@@ -167,7 +229,12 @@ const ScreenManagement: React.FC = () => {
       
       // Get current seat grid data from the SeatLayoutBuilder
       const currentSeats = getCurrentSeatData();
-      console.log('Current seats data:', currentSeats);
+      console.log('Current seats data for saving:', {
+        totalSeats: currentSeats.length,
+        activeSeats: currentSeats.filter(s => s.isActive !== false).length,
+        deletedSeats: currentSeats.filter(s => s.isActive === false).length,
+        sampleSeat: currentSeats[0]
+      });
       
       const layoutData = {
         screenId: selectedScreenId,
@@ -189,65 +256,200 @@ const ScreenManagement: React.FC = () => {
       };
 
       console.log('Layout data to save:', layoutData);
-      const response = await apiService.saveScreenLayout(selectedScreenId, layoutData);
-      console.log('Save response:', response);
+      
+      // Update the seat layout using PUT method
+      const response = await apiService.updateScreenLayout(selectedScreenId, layoutData);
+      console.log('Update response:', response);
       
       if (response.success) {
+        // Show success message
+        console.log('Layout updated successfully!');
+        showToastMessage('Layout updated successfully!');
+        
+        // Automatically refetch the latest layout from database
+        console.log('Refetching latest layout from database...');
+        const refetchResponse = await apiService.getScreenLayout(selectedScreenId);
+        if (refetchResponse.success && refetchResponse.data) {
+          console.log('Successfully refetched layout from database');
+          // Process the refetched data to ensure we have the latest state
+          const layout = refetchResponse.data;
+          if (layout.seats && layout.seats.length > 0) {
+            processSavedSeats(layout.seats);
+          }
+        } else {
+          console.warn('Failed to refetch layout from database');
+          showToastMessage('Layout saved but failed to refresh from database');
+        }
+        // Also update the screen data in the database with new configuration
+        try {
+          const profile = await apiService.getTheatreOwnerProfile();
+          const ownerId = profile?.success ? (profile.data?.id || profile.data?._id) : JSON.parse(localStorage.getItem('theatreOwnerData') || '{}')._id;
+          
+          if (ownerId && selectedScreenId) {
+            // Update screen data in the theatre owner application
+            const updateData = {
+              rows: seatConfig.numRows.toString(),
+              columns: seatConfig.numCols.toString(),
+              aisleColumns: seatConfig.aisleColumns.join(','),
+              seatClasses: seatConfig.seatClassRules.map(rule => ({
+                label: rule.className,
+                price: rule.price.toString()
+              })),
+              seatingCapacity: (seatConfig.numRows * seatConfig.numCols).toString()
+            };
+            
+            // Update screen configuration in the database
+            const updateResponse = await apiService.updateScreenConfiguration(ownerId, selectedScreenId, updateData);
+            if (updateResponse.success) {
+              console.log('Screen configuration updated successfully:', updateResponse.data);
+            } else {
+              console.warn('Failed to update screen configuration:', updateResponse.error);
+            }
+          }
+        } catch (updateError) {
+          console.warn('Failed to update screen configuration:', updateError);
+          // Don't fail the entire save process for this
+        }
+        
         setLayoutSaved(true);
         setHasUnsavedChanges(false);
         // Show success message
         setTimeout(() => setLayoutSaved(false), 3000);
       } else {
         console.error('Failed to save layout:', response.error);
+        alert('Failed to save layout. Please try again.');
       }
     } catch (error) {
       console.error('Error saving screen layout:', error);
+      alert('Error saving screen layout. Please try again.');
     } finally {
       setIsSavingLayout(false);
     }
   };
 
-  // Get current seat data from the layout builder, merged with processed overrides (positions/deletions)
+  // Get current seat data from the layout builder, using real-time grid data
   const getCurrentSeatData = () => {
     const seats: any[] = [];
-    const seatClassByName = new Map<string, SeatClassRule>();
     
-    seatConfig.seatClassRules.forEach(rule => {
-      seatClassByName.set(rule.className, rule);
-    });
+    // Use real-time grid data if available, otherwise fall back to processed seats
+    if (currentGridData.length > 0) {
+      console.log('Using currentGridData for saving, rows:', currentGridData.length);
+      // Process the current grid data from SeatLayoutBuilder
+      currentGridData.forEach((row) => {
+        row.forEach((cell: any) => {
+          if (cell && cell.number > 0 && cell.className) {
+            // Determine tier from className or use default
+            let tier = cell.tier;
+            if (!tier) {
+              if (cell.className?.toLowerCase().includes('vip') || cell.className?.toLowerCase().includes('balcony')) {
+                tier = 'VIP';
+              } else if (cell.className?.toLowerCase().includes('premium') || cell.className?.toLowerCase().includes('gold')) {
+                tier = 'Premium';
+              } else {
+                tier = 'Base';
+              }
+            }
+            
+            seats.push({
+              rowLabel: cell.rowLabel,
+              number: cell.number,
+              x: cell.x || 0,
+              y: cell.y || 0,
+              className: cell.className,
+              price: cell.price || 0,
+              color: cell.color || '#6b7280',
+              status: cell.status || 'available',
+              isActive: cell.isActive !== false,
+              tier: tier,
+              originalRow: cell.rowLabel,
+              originalNumber: cell.number,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
+          }
+        });
+      });
+      console.log('Seats from currentGridData:', seats.length);
+      
+      // Also include deleted seats from processedSeats that might not be in currentGridData
+      processedSeats.forEach((seat) => {
+        if (seat.isActive === false) {
+          // Check if this deleted seat is not already in the seats array
+          const exists = seats.some(s => s.rowLabel === seat.rowLabel && s.number === seat.number);
+          if (!exists) {
+            // Determine tier from className or use existing tier
+            let tier = seat.tier;
+            if (!tier) {
+              if (seat.className?.toLowerCase().includes('vip') || seat.className?.toLowerCase().includes('balcony')) {
+                tier = 'VIP';
+              } else if (seat.className?.toLowerCase().includes('premium') || seat.className?.toLowerCase().includes('gold')) {
+                tier = 'Premium';
+              } else {
+                tier = 'Base';
+              }
+            }
+            
+            seats.push({
+              rowLabel: seat.rowLabel,
+              number: seat.number,
+              x: seat.x || 0,
+              y: seat.y || 0,
+              className: seat.className,
+              price: seat.price || 0,
+              color: seat.color || '#6b7280',
+              status: seat.status || 'deleted',
+              isActive: false,
+              tier: tier,
+              originalRow: seat.originalRow || seat.rowLabel,
+              originalNumber: seat.originalNumber || seat.number,
+              createdAt: seat.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+      });
+    } else {
+      // Fallback to the old method using processed seats
+      const seatClassByName = new Map<string, SeatClassRule>();
+      
+      seatConfig.seatClassRules.forEach(rule => {
+        seatClassByName.set(rule.className, rule);
+      });
 
-    for (let r = 0; r < seatConfig.numRows; r++) {
-      const rowLabel = String.fromCharCode('A'.charCodeAt(0) + r);
-      let seatNumber = 1;
-      for (let c = 1; c <= seatConfig.numCols + seatConfig.aisleColumns.length; c++) {
-        if (seatConfig.aisleColumns.includes(c)) {
-          continue;
+      for (let r = 0; r < seatConfig.numRows; r++) {
+        const rowLabel = String.fromCharCode('A'.charCodeAt(0) + r);
+        let seatNumber = 1;
+        for (let c = 1; c <= seatConfig.numCols + seatConfig.aisleColumns.length; c++) {
+          if (seatConfig.aisleColumns.includes(c)) {
+            continue;
+          }
+          const seatClass = findSeatClassForRow(rowLabel, seatConfig.seatClassRules);
+          if (seatClass) {
+            const defaultX = (c - 1) * 40;
+            const defaultY = r * 40;
+            const seatId = `${rowLabel}-${seatNumber}`;
+            const override = processedSeats.get(seatId);
+            seats.push({
+              rowLabel,
+              number: seatNumber,
+              x: override?.x ?? defaultX,
+              y: override?.y ?? defaultY,
+              className: seatClass.className,
+              price: seatClass.price,
+              color: seatClass.color,
+              status: override?.status ?? 'available',
+              isActive: override?.isActive !== false,
+              originalRow: rowLabel,
+              originalNumber: seatNumber,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
+          }
+          seatNumber++;
         }
-        const seatClass = findSeatClassForRow(rowLabel, seatConfig.seatClassRules);
-        if (seatClass) {
-          const defaultX = (c - 1) * 40;
-          const defaultY = r * 40;
-          const seatId = `${rowLabel}-${seatNumber}`;
-          const override = processedSeats.get(seatId);
-          seats.push({
-            rowLabel,
-            number: seatNumber,
-            x: override?.x ?? defaultX,
-            y: override?.y ?? defaultY,
-            className: seatClass.className,
-            price: seatClass.price,
-            color: seatClass.color,
-            status: override?.status ?? 'available',
-            isActive: override?.isActive !== false,
-            originalRow: rowLabel,
-            originalNumber: seatNumber,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          });
-        }
-        seatNumber++;
       }
     }
+    
     return seats;
   };
 
@@ -333,96 +535,201 @@ const ScreenManagement: React.FC = () => {
   };
 
   // Handle screen selection
-  const handleScreenSelect = (screenId: string) => {
+  const handleScreenSelect = async (screenId: string) => {
     setSelectedScreenId(screenId);
-    loadScreenLayout(screenId);
+    
+    // First, try to load saved layout from database
+    const layoutLoaded = await loadScreenLayout(screenId);
+    
+    // If no saved layout was found, fall back to original data
+    if (!layoutLoaded) {
+      const selectedScreen = screens.find(s => s.id === screenId);
+      if (selectedScreen && selectedScreen.originalData) {
+        const screenData = selectedScreen.originalData;
+        
+        // Load layout configuration from the screen data
+        if (screenData.rows && screenData.columns) {
+          const numRows = parseInt(screenData.rows);
+          const numCols = parseInt(screenData.columns);
+          const aisleCols: number[] = (screenData.aisleColumns || '')
+            .split(',')
+            .map((v: string) => parseInt(v.trim(), 10))
+            .filter((n: number) => !isNaN(n))
+            .sort((a: number, b: number) => a - b);
+          
+          const seatClasses = (screenData.seatClasses || []).map((sc: any) => ({
+            rows: getRowRangeForSeatClass(sc.label, numRows),
+            className: sc.label,
+            price: parseInt(sc.price) || 200,
+            tier: getTierForSeatClass(sc.label),
+            color: getColorForSeatClass(sc.label)
+          }));
+          
+          setSeatConfig({
+            numRows,
+            numCols,
+            aisleColumns: aisleCols,
+            seatClassRules: seatClasses.length > 0 ? seatClasses : [
+              { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
+              { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
+              { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
+            ]
+          });
+          
+          setAisleInput(aisleCols.join(', '));
+          setHasUnsavedChanges(false);
+          setLayoutSaved(false);
+        }
+      }
+    }
   };
 
+  // Track processedSeats changes
   useEffect(() => {
-    // Simulate loading screens
-    setScreens([
-      {
-        id: '1',
-        name: 'Screen 1',
-        capacity: 120,
-        type: '2D',
-        status: 'active',
-        currentMovie: 'Superman',
-        nextShowtime: '7:30 PM',
-        occupancy: 85
-      },
-      {
-        id: '2',
-        name: 'Screen 2',
-        capacity: 150,
-        type: '3D',
-        status: 'active',
-        currentMovie: 'Saiyara',
-        nextShowtime: '8:00 PM',
-        occupancy: 92
-      },
-      {
-        id: '3',
-        name: 'Screen 3',
-        capacity: 200,
-        type: 'IMAX',
-        status: 'active',
-        currentMovie: 'F1: The Movie',
-        nextShowtime: '6:30 PM',
-        occupancy: 78
-      },
-      {
-        id: '4',
-        name: 'Screen 4',
-        capacity: 80,
-        type: '4DX',
-        status: 'maintenance',
-        currentMovie: 'None',
-        nextShowtime: 'N/A',
-        occupancy: 0
-      }
-    ]);
-    // Prefill from signup if available
+    console.log('processedSeats changed:', processedSeats?.size || 0, 'seats');
+    if (processedSeats && processedSeats.size > 0) {
+      console.log('Sample processedSeats entry:', Array.from(processedSeats.entries())[0]);
+    }
+  }, [processedSeats]);
+
+  // Load screens from database
+  const loadScreens = async () => {
     try {
-      const rawSignup = localStorage.getItem('theatreOwnerSignupScreens');
-      const rawOwner = localStorage.getItem('theatreOwnerData');
-      let screensFromSignup: any[] | null = null;
-      if (rawSignup) {
-        screensFromSignup = JSON.parse(rawSignup);
-      } else if (rawOwner) {
-        const parsed = JSON.parse(rawOwner);
-        if (parsed && parsed.screens) screensFromSignup = parsed.screens;
+      setIsLoading(true);
+      
+      // Get theatre owner profile to get owner ID
+      const profile = await apiService.getTheatreOwnerProfile();
+      const ownerId = profile?.success ? (profile.data?.id || profile.data?._id) : JSON.parse(localStorage.getItem('theatreOwnerData') || '{}')._id;
+      
+      if (!ownerId) {
+        console.error('No owner ID found');
+        return;
       }
-      if (Array.isArray(screensFromSignup) && screensFromSignup.length > 0) {
-        const first = screensFromSignup[0];
-        const numRows = parseInt(first?.rows || '');
-        const numCols = parseInt(first?.columns || '');
-        const aisleCols: number[] = (first?.aisleColumns || '')
+
+      // Fetch screens from database
+      const response = await apiService.getOwnerScreens(ownerId);
+      
+      if (response.success && response.data) {
+        const screensArray = Array.isArray(response.data) ? response.data : response.data.screens || [];
+        const screensData = screensArray.map((screen: any) => ({
+          id: screen.screenNumber.toString(),
+          name: screen.name || `Screen ${screen.screenNumber}`,
+          capacity: parseInt(screen.seatingCapacity) || 120,
+          type: (screen.type || '2D') as '2D' | '3D' | 'IMAX' | '4DX',
+          status: 'active' as const,
+          currentMovie: 'None',
+          nextShowtime: 'N/A',
+          occupancy: 0,
+          // Store original data for layout configuration
+          originalData: screen
+        }));
+        
+        setScreens(screensData);
+        
+        // If we have screen data, load the first screen's layout
+        if (screensData.length > 0) {
+          const firstScreen = screensData[0];
+          setSelectedScreenId(firstScreen.id);
+          
+          // Load layout configuration from the screen data
+          const screenData = firstScreen.originalData;
+          if (screenData.rows && screenData.columns) {
+            const numRows = parseInt(screenData.rows);
+            const numCols = parseInt(screenData.columns);
+            const aisleCols: number[] = (screenData.aisleColumns || '')
           .split(',')
           .map((v: string) => parseInt(v.trim(), 10))
           .filter((n: number) => !isNaN(n))
           .sort((a: number, b: number) => a - b);
-        const cls = (first?.seatClasses || []) as Array<{ label: string; price: string }>;
-        setSeatConfig(prev => {
-          const baseRows = !isNaN(numRows) ? numRows : prev.numRows;
-          const baseCols = !isNaN(numCols) ? numCols : prev.numCols;
-          const baseAisles = aisleCols.length ? aisleCols : prev.aisleColumns;
-          const nextRules = prev.seatClassRules.map(r => {
-            const match = cls.find(c => c.label.toLowerCase() === r.className.toLowerCase());
-            return {
-              ...r,
-              price: match ? parseInt(match.price || '0', 10) || r.price : r.price,
-              layout: { numRows: baseRows, numCols: baseCols, aisleColumns: baseAisles },
-            } as any;
-          });
-          setAisleInput(baseAisles.join(', '));
-          return { ...prev, numRows: baseRows, numCols: baseCols, aisleColumns: baseAisles, seatClassRules: nextRules };
-        });
+            
+            const seatClasses = (screenData.seatClasses || []).map((sc: any) => ({
+              rows: getRowRangeForSeatClass(sc.label, numRows),
+              className: sc.label,
+              price: parseInt(sc.price) || 200,
+              tier: getTierForSeatClass(sc.label),
+              color: getColorForSeatClass(sc.label)
+            }));
+            
+            setSeatConfig({
+              numRows,
+              numCols,
+              aisleColumns: aisleCols,
+              seatClassRules: seatClasses.length > 0 ? seatClasses : [
+                { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
+                { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
+                { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
+              ]
+            });
+            
+            setAisleInput(aisleCols.join(', '));
+          }
+        }
+      } else {
+        console.error('Failed to load screens:', response.error);
+        // Fallback to empty state
+        setScreens([]);
       }
-    } catch {}
-    // Auto-select first screen so Save button has an id by default
-    setSelectedScreenId(prev => prev ?? '1');
+    } catch (error) {
+      console.error('Error loading screens:', error);
+      setScreens([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Helper functions for seat class configuration
+  const getColorForSeatClass = (className: string): string => {
+    const colors: Record<string, string> = {
+      'Gold': '#f59e0b',
+      'Silver': '#9ca3af', 
+      'Balcony': '#22c55e',
+      'Premium': '#8b5cf6',
+      'VIP': '#ef4444'
+    };
+    return colors[className] || '#6b7280';
+  };
+
+  const getTierForSeatClass = (className: string): 'Base' | 'Premium' | 'VIP' => {
+    const tiers: Record<string, 'Base' | 'Premium' | 'VIP'> = {
+      'Gold': 'Premium',
+      'Silver': 'Base',
+      'Balcony': 'VIP',
+      'Premium': 'Premium',
+      'VIP': 'VIP'
+    };
+    return tiers[className] || 'Base';
+  };
+
+  const getRowRangeForSeatClass = (className: string, totalRows: number): string => {
+    if (totalRows <= 0) return 'A';
+    
+    // Updated distribution: Gold gets more seats (50%), Silver and Balcony get fewer (25% each)
+    const ranges: Record<string, { start: number; end: number }> = {
+      'Gold': { start: 0, end: Math.floor(totalRows * 0.5) - 1 },
+      'Silver': { start: Math.floor(totalRows * 0.5), end: Math.floor(totalRows * 0.75) - 1 },
+      'Balcony': { start: Math.floor(totalRows * 0.75), end: totalRows - 1 },
+      'Premium': { start: 0, end: Math.floor(totalRows * 0.5) - 1 }, // Same as Gold
+      'VIP': { start: Math.floor(totalRows * 0.75), end: totalRows - 1 } // Same as Balcony
+    };
+    
+    const range = ranges[className] || { start: 0, end: totalRows - 1 };
+    const startRow = String.fromCharCode('A'.charCodeAt(0) + Math.max(0, range.start));
+    const endRow = String.fromCharCode('A'.charCodeAt(0) + Math.min(totalRows - 1, range.end));
+    
+    return startRow === endRow ? startRow : `${startRow}-${endRow}`;
+  };
+
+  useEffect(() => {
+    loadScreens();
   }, []);
+
+  // Load fresh layout data whenever selectedScreenId changes
+  useEffect(() => {
+    if (selectedScreenId) {
+      console.log('Screen ID changed, loading fresh layout data...');
+      loadScreenLayout(selectedScreenId);
+    }
+  }, [selectedScreenId]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -481,25 +788,28 @@ const ScreenManagement: React.FC = () => {
                   const profile = await apiService.getTheatreOwnerProfile();
                   const ownerId = profile?.success ? (profile.data?.id || profile.data?._id) : JSON.parse(localStorage.getItem('theatreOwnerData') || '{}')._id;
                   if (!ownerId) return;
+                  
                   const name = window.prompt('Screen name (optional):', `Screen ${screens.length + 1}`) || `Screen ${screens.length + 1}`;
-                  const res = await apiService.addOwnerScreen(ownerId as string, { name });
+                  const type = window.prompt('Screen type (2D, 3D, IMAX, 4DX):', '2D') || '2D';
+                  
+                  const res = await apiService.addOwnerScreen(ownerId as string, { 
+                    name, 
+                    type: type as '2D' | '3D' | 'IMAX' | '4DX'
+                  });
+                  
                   if (res.success) {
-                    // Reflect basic count locally
-                    const updated = (res.data?.screens || []).map((s:any) => ({
-                      id: String(s.screenNumber),
-                      name: s.name || `Screen ${s.screenNumber}`,
-                      capacity: 120,
-                      type: (s.type || '2D') as any,
-                      status: 'active' as const,
-                      currentMovie: 'None',
-                      nextShowtime: 'N/A',
-                      occupancy: 0
-                    }));
-                    setScreens(updated);
-                    setSelectedScreenId(String(updated.length));
+                    // Reload screens from database to get updated data
+                    await loadScreens();
+                    
+                    // The loadScreens function will automatically select the first screen
+                    // and set the selectedScreenId, so we don't need to do anything here
+                  } else {
+                    console.error('Failed to add screen:', res.error);
+                    alert('Failed to add screen. Please try again.');
                   }
                 } catch (e) {
                   console.error('Add screen failed', e);
+                  alert('Failed to add screen. Please try again.');
                 }
               }}
               className="bg-brand-red text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-all duration-300 flex items-center space-x-2"
@@ -684,6 +994,7 @@ const ScreenManagement: React.FC = () => {
                 </div>
               </div>
               <SeatLayoutBuilder
+                key={`${selectedScreenId}-${processedSeats.size}`}
                 config={seatConfig}
                 onSeatClick={(id, meta) => setSelectedSeatInfo({ id, ...meta })}
                 maxReservableSeats={10}
@@ -697,12 +1008,16 @@ const ScreenManagement: React.FC = () => {
                   setHasUnsavedChanges(true);
                 }}
                 onSeatGridChange={(grid) => {
+                  // Store the current grid data for saving
+                  setCurrentGridData(grid);
+                  
+                  // Update seat statistics
                   const counts: Record<string, number> = {};
                   let total = 0;
                   grid.forEach(row => row.forEach(cell => {
-                    if (cell.number > 0 && cell.category) {
+                    if (cell.number > 0 && (cell as any).className) {
                       total += 1;
-                      counts[cell.category] = (counts[cell.category] || 0) + 1;
+                      counts[(cell as any).className] = (counts[(cell as any).className] || 0) + 1;
                     }
                   }));
                   setSeatStats({ total, byClass: counts });
@@ -729,26 +1044,40 @@ const ScreenManagement: React.FC = () => {
                         Layout saved!
                       </span>
                     )}
-                    <button
-                      onClick={() => {
-                        console.log('Save button clicked');
-                        saveScreenLayout();
-                      }}
-                      disabled={isSavingLayout || !selectedScreenId}
-                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
-                    >
-                      {isSavingLayout ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>Saving...</span>
-                        </>
-                      ) : (
-                        <>
-                          <i className="fas fa-save"></i>
-                          <span>Save Layout</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => {
+                          console.log('Refresh button clicked');
+                          refreshLayout();
+                        }}
+                        disabled={!selectedScreenId}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                      >
+                        <i className="fas fa-sync-alt"></i>
+                        <span>Refresh Layout</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          console.log('Save button clicked');
+                          saveScreenLayout();
+                        }}
+                        disabled={isSavingLayout || !selectedScreenId}
+                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                      >
+                        {isSavingLayout ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <i className="fas fa-save"></i>
+                            <span>Save Layout</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -897,6 +1226,20 @@ const ScreenManagement: React.FC = () => {
           ))}
         </div>
       </div>
+      
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center space-x-2">
+          <i className="fas fa-check-circle"></i>
+          <span>{toastMessage}</span>
+          <button
+            onClick={() => setShowToast(false)}
+            className="ml-2 text-white hover:text-gray-200"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

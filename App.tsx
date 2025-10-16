@@ -24,6 +24,7 @@ import TheatreOwnerDashboard from './pages/TheatreOwnerDashboard';
 import MovieManagement from './theatre-owner/MovieManagement';
 import ScreenManagement from './theatre-owner/ScreenManagement';
 import ManageScreensAndShows from './theatre-owner/ManageScreensAndShows';
+import ManageShowTimings from './theatre-owner/ManageShowTimings';
 import SnacksManagement from './theatre-owner/SnacksManagement';
 import TheatreOwnerReports from './pages/TheatreOwnerReports';
 import TheatreOwnerProfile from './pages/TheatreOwnerProfile';
@@ -96,6 +97,11 @@ const App: React.FC = () => {
                 <Route path="/theatre-owner/shows" element={
                   <TheatreOwnerProtectedRoute>
                     <ManageScreensAndShows />
+                  </TheatreOwnerProtectedRoute>
+                } />
+                <Route path="/theatre-owner/show-timings" element={
+                  <TheatreOwnerProtectedRoute>
+                    <ManageShowTimings />
                   </TheatreOwnerProtectedRoute>
                 } />
                 <Route path="/theatre-owner/snacks" element={
