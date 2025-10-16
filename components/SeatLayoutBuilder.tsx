@@ -77,7 +77,8 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
     const legendMap = new Map<string, SeatClassRule>();
     const classByNameMap = new Map<string, SeatClassRule>();
     
-    // If we have processed seats, restore the exact layout from saved data
+    // If we have processed seats, use them to know about deleted seats
+    // In edit mode, we still need processedSeats to know which seats were deleted
     if (processedSeats && processedSeats.size > 0) {
       console.log('Restoring layout from processed seats:', processedSeats.size);
       console.log('Sample processed seat:', Array.from(processedSeats.values())[0]);
@@ -175,11 +176,26 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                       y: currentRowIndex * 40
                     });
                   } else {
-                    // Check if this seat was deleted - if so, don't create an empty seat
+                    // Check if this seat was deleted - if so, create an empty seat for restoration
                     const seatId = `${rowLabel}-${seatCounter}`;
                     if (deletedSeats.has(seatId)) {
-                      // This seat was deleted, don't create an empty seat
-                      row.push(null);
+                      // This seat was deleted, create an empty seat that can be restored
+                      row.push({
+                        id: seatId,
+                        rowLabel,
+                        number: seatCounter,
+                        className: rule.className,
+                        price: rule.price,
+                        color: rule.color,
+                        tier: rule.tier,
+                        tooltip: `${rowLabel}${seatCounter} · ${rule.className} · ₹${rule.price} · ${rule.tier}`,
+                        isVip: rule.tier === 'VIP',
+                        status: 'available',
+                        isActive: false, // Mark as deleted
+                        isEmpty: true, // Mark as empty for restoration
+                        x: (c - 1) * 40,
+                        y: currentRowIndex * 40,
+                      });
                     } else {
                       // Empty seat position (never occupied)
                       row.push({
@@ -335,7 +351,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
       legend: Array.from(legendMap.values()), 
       classByName: classByNameMap 
     };
-  }, [config, processedSeats]);
+  }, [config, processedSeats, editMode]);
 
   const [editableRowsByTier, setEditableRowsByTier] = React.useState<any[][][]>([]);
   
@@ -625,6 +641,11 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                 const processedSeat = processedSeats?.get(seatId);
                                 const isActive = processedSeat?.isActive !== false;
                                 const seatStatus = processedSeat?.status || 'available';
+                                
+                                // Debug logging
+                                if (cell.isEmpty && !isActive) {
+                                  console.log('Deleted seat found:', { seatId, cell, isActive, isEmpty: cell.isEmpty });
+                                }
                               
                                 return (
                                   <div
@@ -643,18 +664,27 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                     )}
                                   
                                     {cell.isEmpty ? (
-                                      // Only show "+" button in edit mode and if seat is not deleted
-                                      editMode && isActive ? (
+                                      // Show "+" button in edit mode (for both active and deleted seats)
+                                      (() => {
+                                        console.log('Empty cell found:', { 
+                                          seatId: cell.id || `${cell.rowLabel}-${cell.number}`, 
+                                          isEmpty: cell.isEmpty, 
+                                          isActive, 
+                                          editMode,
+                                          cell 
+                                        });
+                                        return editMode;
+                                      })() ? (
                                         <button
                                           onClick={handleCellClickEdit(tierIndex, rowIdx, colIdx, cell.rowLabel, ruleColor)}
                                           className="w-full h-full rounded border border-dashed text-[10px] text-gray-400 flex items-center justify-center"
                                           style={{ borderColor: `${ruleColor}77`, backgroundColor: 'transparent' }}
-                                          title="Add seat here"
+                                          title={isActive ? "Add seat here" : "Restore deleted seat"}
                                         >
                                           +
                                         </button>
                                       ) : (
-                                        // In view mode or for deleted seats, show empty space
+                                        // In view mode, show empty space
                                         <div className="w-full h-full rounded"></div>
                                       )
                                     ) : (

@@ -696,6 +696,15 @@ class ApiService {
     });
   }
 
+  // Public API method for getting screen layout (no authentication required)
+  async getPublicScreenLayout(screenId: string): Promise<ApiResponse<any>> {
+    // Add timestamp to prevent caching
+    const timestamp = Date.now();
+    return this.makeRequest<any>(`/screens/${screenId}/layout?t=${timestamp}`, {
+      method: 'GET'
+    });
+  }
+
   // Screen Management APIs
   async getOwnerScreens(ownerId: string): Promise<ApiResponse<{ screenCount: number; screens: any[] }>> {
     const token = localStorage.getItem('theatreOwnerToken');

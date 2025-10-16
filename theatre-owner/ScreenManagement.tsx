@@ -1106,7 +1106,7 @@ const ScreenManagement: React.FC = () => {
                 </div>
               </div>
               <SeatLayoutBuilder
-                key={`${selectedScreenId}-${processedSeats.size}`}
+                key={`${selectedScreenId}-${processedSeats.size}-${seatConfig.numRows}-${seatConfig.numCols}-${seatConfig.aisleColumns.join(',')}-${seatConfig.seatClassRules.length}`}
                 config={seatConfig}
                 onSeatClick={(id, meta) => setSelectedSeatInfo({ id, ...meta })}
                 maxReservableSeats={10}

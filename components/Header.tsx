@@ -88,6 +88,14 @@ const Header: React.FC = () => {
               <Link to="/" className="text-2xl font-bold text-brand-red">
                 BookNView
               </Link>
+              <nav className="hidden md:flex space-x-6">
+                <Link to="/" className="text-white hover:text-brand-red transition-colors">
+                  Home
+                </Link>
+                <Link to="/live-movies" className="text-white hover:text-brand-red transition-colors">
+                  Live Movies
+                </Link>
+              </nav>
               <div className="hidden md:flex relative">
                 <i className="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                 <input
