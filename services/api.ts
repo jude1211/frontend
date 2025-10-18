@@ -4,6 +4,10 @@ const VITE_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undef
 const DEFAULT_BASES = ['http://localhost:5000/api/v1'];
 const API_BASE_CANDIDATES = VITE_BASE ? [VITE_BASE] : DEFAULT_BASES;
 
+// Import request cache and throttling
+import { requestCache } from './requestCache';
+import { requestThrottle } from '../utils/requestThrottle';
+
 // Add error logging for debugging
 const originalFetch = window.fetch;
 window.fetch = function(...args) {
@@ -77,19 +81,24 @@ interface AuthResponse {
 class ApiService {
   // Live seat layout for a show (with availability)
   async getLiveSeatLayout(screenId: string, bookingDate: string, showtime: string): Promise<ApiResponse<any>> {
-    return this.tryFetch<any>(`/seat-layout/${encodeURIComponent(screenId)}/${encodeURIComponent(bookingDate)}/${encodeURIComponent(showtime)}`, {
-      method: 'GET'
-    }, false);
+    const endpoint = `/seat-layout/${encodeURIComponent(screenId)}/${encodeURIComponent(bookingDate)}/${encodeURIComponent(showtime)}`;
+    
+    // Throttle seat layout requests to prevent excessive calls
+    return requestThrottle.throttle(
+      `seat-layout-${screenId}-${bookingDate}-${showtime}`,
+      () => this.tryFetch<any>(endpoint, { method: 'GET' }, false, false), // Disable cache for real-time data
+      { delay: 1000, maxRequests: 10, windowMs: 60000 } // More lenient: 10 requests per minute with 1s delay
+    );
   }
 
   // Confirm booking for a showtime (atomic validation + booking)
-  async confirmSeatBooking(screenId: string, bookingDate: string, showtime: string, seats: Array<{ rowLabel: string; number: number; price: number }>): Promise<ApiResponse<{ bookingId: string; totalAmount: number; currency: string }>> {
+  async confirmSeatBooking(screenId: string, bookingDate: string, showtime: string, bookingPayload: any): Promise<ApiResponse<{ bookingId: string; totalAmount: number; currency: string }>> {
     return this.tryFetch<{ bookingId: string; totalAmount: number; currency: string }>(`/seat-layout/${encodeURIComponent(screenId)}/${encodeURIComponent(bookingDate)}/${encodeURIComponent(showtime)}/book`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ seats })
+      body: JSON.stringify(bookingPayload)
     }, true);
   }
 
@@ -98,52 +107,112 @@ class ApiService {
     return this.tryFetch<any>(`/shows/${encodeURIComponent(showId)}/seat-layout`, { method: 'GET' }, false);
   }
 
-  private async tryFetch<T>(endpoint: string, options: RequestInit, isFormData: boolean): Promise<ApiResponse<T>> {
-    let lastError: any;
-    for (const base of API_BASE_CANDIDATES) {
-      try {
-        // Longer timeout for uploads (multipart), shorter for JSON
-        const timeoutMs = isFormData ? 30000 : 8000;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        const defaultHeaders = this.getAuthHeaders(isFormData);
-        const optionHeaders = (options.headers || {}) as HeadersInit;
-        // Merge headers so Authorization is preserved while allowing overrides like Content-Type
-        const mergedHeaders: HeadersInit = { ...(defaultHeaders as any), ...(optionHeaders as any) };
-        const response = await fetch(`${base}${endpoint}`, {
-          ...options,
-          headers: mergedHeaders,
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        let data: any = null;
-        try {
-          data = await response.json();
-        } catch (parseError) {
-          // Non-JSON response
-          data = { message: response.statusText };
-        }
+  // Fetch booking details by booking ID
 
-        if (!response.ok) {
-          console.error('API request failed:', {
-            endpoint: `${base}${endpoint}`,
-            status: response.status,
-            data
-          });
-          const error: any = new Error(data.message || data.error || 'Request failed');
-          error.status = response.status;
-          error.data = data;
-          error.details = data.details;
-          throw error;
-        }
-        return data as ApiResponse<T>;
-      } catch (err) {
-        lastError = err;
-        // Try next candidate
-        continue;
+  private async tryFetch<T>(endpoint: string, options: RequestInit, isFormData: boolean, useCache: boolean = true, retryCount: number = 0): Promise<ApiResponse<T>> {
+    // Check cache first for GET requests
+    if (useCache && (!options.method || options.method === 'GET')) {
+      const cached = requestCache.get<ApiResponse<T>>(endpoint, options);
+      if (cached) {
+        return cached;
+      }
+
+      // Check for pending request
+      const pending = requestCache.getPendingRequest<ApiResponse<T>>(endpoint, options);
+      if (pending) {
+        return pending;
       }
     }
-    throw lastError || new Error('Network error');
+
+    let lastError: any;
+    const fetchPromise = (async () => {
+      for (const base of API_BASE_CANDIDATES) {
+        try {
+          // Longer timeout for uploads (multipart), shorter for JSON
+          const timeoutMs = isFormData ? 30000 : 8000;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          const defaultHeaders = this.getAuthHeaders(isFormData);
+          const optionHeaders = (options.headers || {}) as HeadersInit;
+          // Merge headers so Authorization is preserved while allowing overrides like Content-Type
+          const mergedHeaders: HeadersInit = { ...(defaultHeaders as any), ...(optionHeaders as any) };
+          const response = await fetch(`${base}${endpoint}`, {
+            ...options,
+            headers: mergedHeaders,
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          let data: any = null;
+          try {
+            data = await response.json();
+          } catch (parseError) {
+            // Non-JSON response
+            data = { message: response.statusText };
+          }
+
+          if (!response.ok) {
+            console.error('API request failed:', {
+              endpoint: `${base}${endpoint}`,
+              status: response.status,
+              data,
+              retryCount
+            });
+            
+            // Retry on rate limit or server errors (but not on client errors)
+            if ((response.status === 429 || response.status >= 500) && retryCount < 3) {
+              const backoffDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+              console.log(`⏳ Retrying request in ${backoffDelay}ms (attempt ${retryCount + 1}/3)`);
+              await new Promise(resolve => setTimeout(resolve, backoffDelay));
+              return this.tryFetch<T>(endpoint, options, isFormData, useCache, retryCount + 1);
+            }
+            
+            const error: any = new Error(data.message || data.error || 'Request failed');
+            error.status = response.status;
+            error.data = data;
+            error.details = data.details;
+            throw error;
+          }
+          return data as ApiResponse<T>;
+        } catch (err) {
+          lastError = err;
+          // Try next candidate
+          continue;
+        }
+      }
+      throw lastError || new Error('Network error');
+    })();
+
+    // Set pending request for deduplication
+    if (useCache && (!options.method || options.method === 'GET')) {
+      requestCache.setPendingRequest(endpoint, fetchPromise, options);
+    }
+
+    try {
+      const result = await fetchPromise;
+      
+      // Cache successful GET requests
+      if (useCache && (!options.method || options.method === 'GET') && result.success) {
+        // Different TTL for different types of data
+        let ttl = 5 * 60 * 1000; // 5 minutes default
+        
+        if (endpoint.includes('/movies/now-showing') || endpoint.includes('/movies/coming-soon')) {
+          ttl = 10 * 60 * 1000; // 10 minutes for movie lists
+        } else if (endpoint.includes('/seat-layout')) {
+          ttl = 30 * 1000; // 30 seconds for seat layouts (real-time data)
+        } else if (endpoint.includes('/movies/') && !endpoint.includes('/showtimes')) {
+          ttl = 15 * 60 * 1000; // 15 minutes for movie details
+        }
+        
+        requestCache.set(endpoint, result, ttl);
+      }
+      
+      return result;
+    } finally {
+      // Clear pending request
+      if (useCache && (!options.method || options.method === 'GET')) {
+        requestCache.clearPendingRequest(endpoint, options);
+      }
+    }
   }
   private getAuthHeaders(isFormData: boolean = false): HeadersInit {
     const token = localStorage.getItem('authToken');
@@ -161,10 +230,10 @@ class ApiService {
     return headers;
   }
 
-  async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+  async makeRequest<T>(endpoint: string, options: RequestInit = {}, useCache: boolean = true): Promise<ApiResponse<T>> {
     try {
       const isFormData = options.body instanceof FormData;
-      return await this.tryFetch<T>(endpoint, options, isFormData);
+      return await this.tryFetch<T>(endpoint, options, isFormData, useCache);
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
@@ -449,6 +518,21 @@ class ApiService {
   clearAuth(): void {
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
+    // Clear cache when user logs out
+    requestCache.clear();
+  }
+
+  // Cache management methods
+  clearCache(): void {
+    requestCache.clear();
+  }
+
+  clearCachePattern(pattern: string): void {
+    requestCache.clearPattern(pattern);
+  }
+
+  getCacheStats(): { cacheSize: number; pendingRequests: number } {
+    return requestCache.getStats();
   }
 
   // Admin methods

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
 import { apiService } from '../services/api';
+import { validateShowtime, getShowtimeStatus } from '../utils/showtimeValidation';
 
 const ManageScreensAndShows: React.FC = () => {
   const [ownerMovies, setOwnerMovies] = useState<any[]>([]);
@@ -16,6 +17,7 @@ const ManageScreensAndShows: React.FC = () => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [popupContent, setPopupContent] = useState<{ title?: string; message: string }>({ message: '' });
   const [movieFilter, setMovieFilter] = useState<'all' | 'now_showing' | 'coming_soon'>('all');
+  const [showtimeFilter, setShowtimeFilter] = useState<'all' | 'valid' | 'past'>('all');
 
   const openPopup = (message: string, title?: string) => {
     setPopupContent({ title, message });
@@ -658,16 +660,48 @@ const ManageScreensAndShows: React.FC = () => {
         </div>
 
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Existing Shows {selectedScreenId && `- Screen ${selectedScreenId}`}
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-white">
+              Existing Shows {selectedScreenId && `- Screen ${selectedScreenId}`}
+            </h2>
+            <div className="flex gap-2">
+              <select 
+                value={showtimeFilter} 
+                onChange={(e) => setShowtimeFilter(e.target.value as 'all' | 'valid' | 'past')}
+                className="bg-gray-700 text-white rounded px-3 py-1 text-sm border border-gray-600"
+              >
+                <option value="all">All Showtimes</option>
+                <option value="valid">Valid Only</option>
+                <option value="past">Past Only</option>
+              </select>
+            </div>
+          </div>
           {(!shows || shows.length === 0) && (
             <p className="text-gray-400">
               {selectedScreenId ? `No shows assigned to Screen ${selectedScreenId}.` : 'Select a screen to view its shows.'}
             </p>
           )}
           <div className="space-y-3">
-            {shows.map((sh:any)=> (
+            {shows
+              .filter((sh: any) => {
+                if (showtimeFilter === 'all') return true;
+                
+                const hasValidShowtimes = (sh.showtimes || []).some((showtime: string) => {
+                  const validation = validateShowtime(sh.bookingDate, showtime);
+                  return validation.isValid;
+                });
+                
+                const hasPastShowtimes = (sh.showtimes || []).some((showtime: string) => {
+                  const validation = validateShowtime(sh.bookingDate, showtime);
+                  return !validation.isValid && validation.isPast;
+                });
+                
+                if (showtimeFilter === 'valid') return hasValidShowtimes;
+                if (showtimeFilter === 'past') return hasPastShowtimes;
+                
+                return true;
+              })
+              .map((sh:any)=> (
               <div key={sh._id} className="flex items-start justify-between bg-black/30 border border-gray-700 rounded-lg px-4 py-3">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <div className="h-12 w-9 rounded overflow-hidden bg-gray-700 flex items-center justify-center flex-shrink-0">
@@ -771,9 +805,29 @@ const ManageScreensAndShows: React.FC = () => {
                           })()}
                         </div>
                         <div className="flex flex-wrap gap-2">
-                      {(sh.showtimes||[]).map((t:string, idx:number)=> (
-                        <span key={`${sh._id}-t-${idx}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-emerald-500/15 text-emerald-200 border border-emerald-400/30"><i className="fas fa-clock"></i>{t}</span>
-                      ))}
+                      {(sh.showtimes||[]).map((t:string, idx:number)=> {
+                        const validation = validateShowtime(sh.bookingDate, t);
+                        const status = getShowtimeStatus(sh.bookingDate, t);
+                        return (
+                          <span 
+                            key={`${sh._id}-t-${idx}`} 
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] border ${
+                              validation.isValid 
+                                ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30'
+                                : validation.isPast
+                                ? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+                                : 'bg-yellow-500/15 text-yellow-200 border-yellow-400/30'
+                            }`}
+                            title={status.tooltip}
+                          >
+                            <i className="fas fa-clock"></i>
+                            {t}
+                            {!validation.isValid && (
+                              <i className={`fas ${validation.isPast ? 'fa-times' : 'fa-exclamation-triangle'} ml-1`}></i>
+                            )}
+                          </span>
+                        );
+                      })}
                     </div>
                       </>
                     )}

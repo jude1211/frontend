@@ -30,6 +30,8 @@ export interface SeatLayoutBuilderProps {
   onSeatRestoration?: (seatId: string) => void;
   onManualLayoutChange?: (seatIdsByRow: string[][]) => void;
   onSeatGridChange?: (grid: Array<Array<{ row: number; col: number; rowLabel: string; number: number; className?: string }>>) => void;
+  selectedSeats?: Set<string>;
+  reservedSeats?: Set<string>;
 }
 
 function getRowLabel(indexZeroBased: number): string {
@@ -71,7 +73,9 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
   onSeatPositionUpdate,
   onSeatRestoration,
   onManualLayoutChange, 
-  onSeatGridChange 
+  onSeatGridChange,
+  selectedSeats = new Set(),
+  reservedSeats = new Set()
 }) => {
   const { organizedTiers, legend, classByName } = React.useMemo(() => {
     const legendMap = new Map<string, SeatClassRule>();
@@ -557,7 +561,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
   const addSeatCallback = ({ row, number, id }: any, addCb: any) => {
     const rowLabel = getRowLabel(row - 1);
     const seatClass = findSeatClassForRow(rowLabel, config.seatClassRules);
-    onSeatClick?.(id, { rowLabel, columnNumber: number, seatClass });
+    onSeatClick?.(`${rowLabel}-${number}`, { rowLabel, columnNumber: number, seatClass });
     addCb(row, number, id);
   };
 
@@ -569,12 +573,18 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
     <div className="w-full">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-3">
-          {legend.map((rule) => (
-            <div key={rule.className} className="flex items-center space-x-2">
-              <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: rule.color }}></span>
-              <span className="text-sm text-gray-300">{rule.className} · ₹{rule.price} · {rule.tier}</span>
-            </div>
-          ))}
+          <div className="flex items-center space-x-2">
+            <span className="inline-block w-3 h-3 rounded-sm bg-green-500"></span>
+            <span className="text-sm text-gray-300">Available</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="inline-block w-3 h-3 rounded-sm bg-yellow-400"></span>
+            <span className="text-sm text-gray-300">Selected</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="inline-block w-3 h-3 rounded-sm bg-gray-500"></span>
+            <span className="text-sm text-gray-300">Sold</span>
+          </div>
         </div>
         <span className="text-xs text-gray-500">Click seats to preview selection</span>
       </div>
@@ -693,7 +703,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                         draggable={editMode}
                                         onDragStart={onDragStart(tierIndex, rowIdx, colIdx)}
                                           onDragEnd={onDragEnd}
-                                        onClick={() => onSeatClick?.(cell.id, { 
+                                        onClick={() => onSeatClick?.(`${cell.rowLabel}-${cell.number}`, { 
                                           rowLabel: cell.rowLabel, 
                                           columnNumber: cell.number, 
                                           seatClass: tier.rule 
@@ -707,12 +717,45 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                             }
                                           }}
                                           title={cell.tooltip}
+                                          disabled={reservedSeats.has(`${cell.rowLabel}-${cell.number}`)}
                                         className={`w-full h-full rounded border text-[9px] text-gray-200 flex items-center justify-center transition-all duration-200 hover:scale-110 ${
                                             isActive === false ? 'opacity-50' : ''
+                                        } ${reservedSeats.has(`${cell.rowLabel}-${cell.number}`) ? 'opacity-50 cursor-not-allowed' : ''} ${
+                                            selectedSeats.has(`${cell.rowLabel}-${cell.number}`) ? 'ring-2 ring-yellow-400' : ''
                                         } ${editMode ? 'cursor-move' : 'cursor-pointer'}`}
+                                        onClick={() => {
+                                          const seatKey = `${cell.rowLabel}-${cell.number}`;
+                                          const isReserved = reservedSeats.has(seatKey);
+                                          const isSelected = selectedSeats.has(seatKey);
+                                          console.log('Seat clicked:', {
+                                            seatKey,
+                                            cellId: cell.id,
+                                            isReserved,
+                                            isSelected,
+                                            reservedSeats: Array.from(reservedSeats),
+                                            selectedSeats: Array.from(selectedSeats),
+                                            cell: { rowLabel: cell.rowLabel, number: cell.number, id: cell.id }
+                                          });
+                                          if (!isReserved) {
+                                            // Use seatKey as the seatId to ensure consistent ID format
+                                            onSeatClick?.(seatKey, cell);
+                                          }
+                                        }}
                                           style={{ 
-                                            backgroundColor: isActive === false ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)', 
-                                            borderColor: isActive === false ? '#ef4444' : ruleColor, 
+                                            backgroundColor: reservedSeats.has(`${cell.rowLabel}-${cell.number}`) 
+                                              ? 'rgba(107, 114, 128, 0.3)' 
+                                              : selectedSeats.has(`${cell.rowLabel}-${cell.number}`)
+                                                ? 'rgba(251, 191, 36, 0.3)'
+                                                : isActive === false 
+                                                  ? 'rgba(239,68,68,0.08)' 
+                                                  : 'rgba(34,197,94,0.08)', 
+                                            borderColor: reservedSeats.has(`${cell.rowLabel}-${cell.number}`)
+                                              ? '#6b7280'
+                                              : selectedSeats.has(`${cell.rowLabel}-${cell.number}`)
+                                                ? '#fbbf24'
+                                                : isActive === false 
+                                                  ? '#ef4444' 
+                                                  : ruleColor, 
                                             borderWidth: 2 as any 
                                           }}
                                         >

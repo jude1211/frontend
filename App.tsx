@@ -30,6 +30,7 @@ import TheatreOwnerReports from './pages/TheatreOwnerReports';
 import TheatreOwnerProfile from './pages/TheatreOwnerProfile';
 import DynamicMovieLanding from './pages/DynamicMovieLanding';
 import LiveSeatLayoutPage from './pages/LiveSeatLayoutPage';
+import BookingConfirmationPage from './pages/BookingConfirmationPage';
 
 const App: React.FC = () => {
   return (
@@ -44,6 +45,7 @@ const App: React.FC = () => {
                 <Route path="/live-movies" element={<DynamicMovieLanding />} />
                 <Route path="/movie/:id" element={<MovieDetailPage />} />
                 <Route path="/live-seats/:movieId/:screenId/:bookingDate/:showtime" element={<LiveSeatLayoutPage />} />
+                <Route path="/booking-confirmation/:bookingId" element={<BookingConfirmationPage />} />
                 <Route path="/select-seats/:movieId/:screenId/:bookingDate/:time" element={<SeatSelectionPage />} />
                 <Route path="/snacks" element={<SnackOrderPage />} />
                 <Route path="/checkout" element={<CheckoutPage />} />

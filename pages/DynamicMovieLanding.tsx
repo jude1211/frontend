@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import SeatLayoutBuilder, { SeatLayoutConfig } from '../components/SeatLayoutBuilder';
 import BookNViewLoader from '../components/BookNViewLoader';
+import { filterValidScreens, getShowtimeStatus } from '../utils/showtimeValidation';
 
 interface Movie {
   _id: string;
@@ -60,8 +61,14 @@ const DynamicMovieLanding: React.FC = () => {
         
         const response = await apiService.getActiveMoviesWithShows();
         if (response.success && Array.isArray(response.data)) {
-          setMovieBundles(response.data);
-          console.log('Fetched movie bundles:', response.data);
+          // Filter out past showtimes for each movie bundle
+          const filteredBundles = response.data.map(bundle => ({
+            ...bundle,
+            screens: filterValidScreens(bundle.screens)
+          })).filter(bundle => bundle.screens.length > 0);
+          
+          setMovieBundles(filteredBundles);
+          console.log('Fetched movie bundles:', filteredBundles);
         } else {
           setError('Failed to fetch movies');
           setMovieBundles([]);
@@ -138,12 +145,16 @@ const DynamicMovieLanding: React.FC = () => {
   // Get today's date in ISO format
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  // Get available dates for a movie
+  // Get available dates for a movie (filter out past dates)
   const getAvailableDates = (screens: Screen[]) => {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
     const dates = new Set<string>();
     screens.forEach(screen => {
       screen.showGroups.forEach(group => {
-        dates.add(group.bookingDate);
+        // Only include future dates
+        if (group.bookingDate >= today) {
+          dates.add(group.bookingDate);
+        }
       });
     });
     return Array.from(dates).sort();
@@ -247,27 +258,34 @@ const DynamicMovieLanding: React.FC = () => {
 
                       {/* Showtimes */}
                       <div className="flex flex-wrap gap-2">
-                        {screen.showGroups[0]?.showtimes.map((showtime, index) => (
-                          <button
-                            key={index}
-                            onClick={() => handleShowtimeClick(
-                              bundle.movie._id,
-                              screen.screenId,
-                              selectedDate,
-                              showtime,
-                              screen.showGroups[0]?.theatreId
-                            )}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                              selectedShow?.movieId === bundle.movie._id && 
-                              selectedShow?.screenId === screen.screenId && 
-                              selectedShow?.showtime === showtime
-                                ? 'bg-brand-red text-white shadow-lg transform scale-105'
-                                : 'bg-brand-dark text-white hover:bg-brand-red hover:text-white hover:scale-105'
-                            }`}
-                          >
-                            ⏰ {showtime}
-                          </button>
-                        ))}
+                        {screen.showGroups[0]?.showtimes.map((showtime, index) => {
+                          const showtimeStatus = getShowtimeStatus(selectedDate, showtime);
+                          return (
+                            <button
+                              key={index}
+                              onClick={() => !showtimeStatus.disabled && handleShowtimeClick(
+                                bundle.movie._id,
+                                screen.screenId,
+                                selectedDate,
+                                showtime,
+                                screen.showGroups[0]?.theatreId
+                              )}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                showtimeStatus.disabled
+                                  ? 'bg-gray-500 text-gray-300 cursor-not-allowed opacity-50'
+                                  : selectedShow?.movieId === bundle.movie._id && 
+                                    selectedShow?.screenId === screen.screenId && 
+                                    selectedShow?.showtime === showtime
+                                    ? 'bg-brand-red text-white shadow-lg transform scale-105'
+                                    : 'bg-brand-dark text-white hover:bg-brand-red hover:text-white hover:scale-105'
+                              }`}
+                              disabled={showtimeStatus.disabled}
+                              title={showtimeStatus.tooltip}
+                            >
+                              ⏰ {showtime}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

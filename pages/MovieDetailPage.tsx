@@ -5,6 +5,7 @@ import { apiService } from '../services/api';
 import { Movie } from '../types';
 import TrailerPlayer from '../components/TrailerPlayer';
 import CastScroller from '../components/CastScroller';
+import { filterValidScreens, getShowtimeStatus, validateShowtime } from '../utils/showtimeValidation';
 
 
 const MovieDetailPage: React.FC = () => {
@@ -79,7 +80,9 @@ const MovieDetailPage: React.FC = () => {
       try {
         const res = await apiService.getMovieShowtimes(id!);
         if (res.success && Array.isArray(res.data)) {
-          setScreens(res.data);
+          // Filter out past showtimes using the validation utility
+          const validScreens = filterValidScreens(res.data);
+          setScreens(validScreens);
         } else {
           setScreens([]);
         }
@@ -202,15 +205,20 @@ const MovieDetailPage: React.FC = () => {
                   <div key={idx} className="mb-2">
                     <div className="text-xs text-gray-300 mb-1">{group.theatre} • {group.bookingDate}</div>
                     <div className="flex flex-wrap gap-2">
-                      {group.showtimes.map((t: string) => (
-                        <button
-                          key={`${screen.screenId}-${group.bookingDate}-${t}`}
-                          onClick={() => handleShowtimeSelect(screen.screenId, group.bookingDate, t)}
-                          className="px-3 py-1 rounded-full text-xs font-semibold bg-brand-red text-white hover:bg-red-600 transition-colors"
-                        >
-                          {t}
-                        </button>
-                      ))}
+                      {group.showtimes.map((t: string) => {
+                        const showtimeStatus = getShowtimeStatus(group.bookingDate, t);
+                        return (
+                          <button
+                            key={`${screen.screenId}-${group.bookingDate}-${t}`}
+                            onClick={() => !showtimeStatus.disabled && handleShowtimeSelect(screen.screenId, group.bookingDate, t)}
+                            className={showtimeStatus.className}
+                            disabled={showtimeStatus.disabled}
+                            title={showtimeStatus.tooltip}
+                          >
+                            {t}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
