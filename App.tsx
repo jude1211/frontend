@@ -31,6 +31,7 @@ import TheatreOwnerProfile from './pages/TheatreOwnerProfile';
 import DynamicMovieLanding from './pages/DynamicMovieLanding';
 import LiveSeatLayoutPage from './pages/LiveSeatLayoutPage';
 import BookingConfirmationPage from './pages/BookingConfirmationPage';
+import BookingHistory from './components/BookingHistory';
 
 const App: React.FC = () => {
   return (
@@ -52,6 +53,11 @@ const App: React.FC = () => {
                 <Route path="/profile" element={
                   <ProtectedRoute>
                     <ProfilePage />
+                  </ProtectedRoute>
+                } />
+                <Route path="/bookings" element={
+                  <ProtectedRoute>
+                    <BookingHistory />
                   </ProtectedRoute>
                 } />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />

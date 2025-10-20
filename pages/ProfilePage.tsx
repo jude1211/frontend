@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { apiService } from '../services/api';
 // Removed DocumentManager import as the documents section is no longer used
 
 const ProfilePage: React.FC = () => {
@@ -8,6 +9,13 @@ const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
+  const [bookingStats, setBookingStats] = useState({
+    totalBookings: 0,
+    confirmedBookings: 0,
+    cancelledBookings: 0,
+    completedBookings: 0
+  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (userData) {
@@ -15,11 +23,39 @@ const ProfilePage: React.FC = () => {
     }
   }, [userData]);
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchBookingStats();
+    }
+  }, [isAuthenticated]);
+
   const handleInputChange = (field: string, value: any) => {
     setEditForm((prev: any) => ({
       ...prev,
       [field]: value
     }));
+  };
+
+  const fetchBookingStats = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getUserBookings();
+      
+      if (response.success && response.data) {
+        const bookings = response.data;
+        const stats = {
+          totalBookings: bookings.length,
+          confirmedBookings: bookings.filter(b => b.status === 'confirmed').length,
+          cancelledBookings: bookings.filter(b => b.status === 'cancelled').length,
+          completedBookings: bookings.filter(b => b.status === 'completed').length
+        };
+        setBookingStats(stats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch booking stats:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSaveProfile = () => {
@@ -238,12 +274,14 @@ const ProfilePage: React.FC = () => {
                 Account Activity
               </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="bg-brand-dark p-4 rounded-lg border border-brand-dark hover:border-blue-500 transition-colors">
                   <div className="flex items-center">
                     <i className="fas fa-ticket-alt text-blue-500 text-2xl mr-3"></i>
                     <div>
-                      <p className="text-2xl font-bold text-white">0</p>
+                      <p className="text-2xl font-bold text-white">
+                        {loading ? '...' : bookingStats.totalBookings}
+                      </p>
                       <p className="text-sm text-brand-light-gray">Total Bookings</p>
                     </div>
                   </div>
@@ -251,10 +289,24 @@ const ProfilePage: React.FC = () => {
 
                 <div className="bg-brand-dark p-4 rounded-lg border border-brand-dark hover:border-green-500 transition-colors">
                   <div className="flex items-center">
-                    <i className="fas fa-heart text-green-500 text-2xl mr-3"></i>
+                    <i className="fas fa-check-circle text-green-500 text-2xl mr-3"></i>
                     <div>
-                      <p className="text-2xl font-bold text-white">0</p>
-                      <p className="text-sm text-brand-light-gray">Favorites</p>
+                      <p className="text-2xl font-bold text-white">
+                        {loading ? '...' : bookingStats.confirmedBookings}
+                      </p>
+                      <p className="text-sm text-brand-light-gray">Confirmed</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-brand-dark p-4 rounded-lg border border-brand-dark hover:border-red-500 transition-colors">
+                  <div className="flex items-center">
+                    <i className="fas fa-times-circle text-red-500 text-2xl mr-3"></i>
+                    <div>
+                      <p className="text-2xl font-bold text-white">
+                        {loading ? '...' : bookingStats.cancelledBookings}
+                      </p>
+                      <p className="text-sm text-brand-light-gray">Cancelled</p>
                     </div>
                   </div>
                 </div>
@@ -263,8 +315,10 @@ const ProfilePage: React.FC = () => {
                   <div className="flex items-center">
                     <i className="fas fa-star text-purple-500 text-2xl mr-3"></i>
                     <div>
-                      <p className="text-2xl font-bold text-white">0</p>
-                      <p className="text-sm text-brand-light-gray">Reviews</p>
+                      <p className="text-2xl font-bold text-white">
+                        {loading ? '...' : bookingStats.completedBookings}
+                      </p>
+                      <p className="text-sm text-brand-light-gray">Completed</p>
                     </div>
                   </div>
                 </div>
@@ -326,7 +380,10 @@ const ProfilePage: React.FC = () => {
               </h3>
 
               <div className="space-y-3">
-                <button className="w-full text-left px-4 py-3 rounded-lg border border-brand-dark hover:bg-brand-dark hover:border-brand-red transition-colors group">
+                <button 
+                  onClick={() => navigate('/bookings')}
+                  className="w-full text-left px-4 py-3 rounded-lg border border-brand-dark hover:bg-brand-dark hover:border-brand-red transition-colors group"
+                >
                   <div className="flex items-center">
                     <i className="fas fa-ticket-alt text-blue-500 mr-3 group-hover:scale-110 transition-transform"></i>
                     <div>

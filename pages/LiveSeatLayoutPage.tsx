@@ -1110,6 +1110,7 @@ const LiveSeatLayoutPage: React.FC = () => {
                 No seat layout available for this screen
               </div>
             </div>
+
           )}
 
 

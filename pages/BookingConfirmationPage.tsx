@@ -240,15 +240,15 @@ const BookingConfirmationPage: React.FC = () => {
       }
       
       const hoursUntilShow = (showDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-      
-      console.log('Time calculation:', {
-        now: now.toISOString(),
+    
+    console.log('Time calculation:', {
+      now: now.toISOString(),
         showDateTime: showDateTime.toISOString(),
-        hoursUntilShow: hoursUntilShow,
-        canCancel: hoursUntilShow > 2
-      });
-      
-      return hoursUntilShow > 2; // Can cancel up to 2 hours before show
+      hoursUntilShow: hoursUntilShow,
+      canCancel: hoursUntilShow > 2
+    });
+    
+    return hoursUntilShow > 2; // Can cancel up to 2 hours before show
     } catch (error) {
       console.error('Error parsing showtime:', error);
       return false;
@@ -346,32 +346,32 @@ const BookingConfirmationPage: React.FC = () => {
         }
       }
       const hoursUntilShow = (showDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-      
-      let policy = {
-        canCancel: hoursUntilShow > 2,
-        hoursUntilShow: Math.round(hoursUntilShow * 10) / 10,
-        cancellationFee: 0,
-        refundAmount: bookingData.pricing.totalAmount,
-        message: ''
-      };
-      
-      if (hoursUntilShow > 24) {
-        // More than 24 hours: No cancellation fee
-        policy.cancellationFee = 0;
-        policy.refundAmount = bookingData.pricing.totalAmount;
-        policy.message = 'Full refund available';
-      } else if (hoursUntilShow > 2) {
-        // 2-24 hours: 10% cancellation fee
-        policy.cancellationFee = Math.round(bookingData.pricing.totalAmount * 0.1);
-        policy.refundAmount = bookingData.pricing.totalAmount - policy.cancellationFee;
-        policy.message = '10% cancellation fee applies';
-      } else {
-        // Less than 2 hours: Cannot cancel
-        policy.canCancel = false;
-        policy.message = 'Cannot cancel within 2 hours of showtime';
-      }
-      
-      return policy;
+    
+    let policy = {
+      canCancel: hoursUntilShow > 2,
+      hoursUntilShow: Math.round(hoursUntilShow * 10) / 10,
+      cancellationFee: 0,
+      refundAmount: bookingData.pricing.totalAmount,
+      message: ''
+    };
+    
+    if (hoursUntilShow > 24) {
+      // More than 24 hours: No cancellation fee
+      policy.cancellationFee = 0;
+      policy.refundAmount = bookingData.pricing.totalAmount;
+      policy.message = 'Full refund available';
+    } else if (hoursUntilShow > 2) {
+      // 2-24 hours: 10% cancellation fee
+      policy.cancellationFee = Math.round(bookingData.pricing.totalAmount * 0.1);
+      policy.refundAmount = bookingData.pricing.totalAmount - policy.cancellationFee;
+      policy.message = '10% cancellation fee applies';
+    } else {
+      // Less than 2 hours: Cannot cancel
+      policy.canCancel = false;
+      policy.message = 'Cannot cancel within 2 hours of showtime';
+    }
+    
+    return policy;
     } catch (error) {
       console.error('Error parsing showtime for policy:', error);
       return {
