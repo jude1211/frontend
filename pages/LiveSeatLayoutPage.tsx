@@ -1017,64 +1017,7 @@ const LiveSeatLayoutPage: React.FC = () => {
                 )}
               </button>
               
-              <button
-                onClick={async () => {
-                  try {
-                    // Bypass cache for manual refresh to get latest data
-                    const liveRes = await apiService.makeRequest<any>(`/seat-layout/${encodeURIComponent(screenId || '')}/${encodeURIComponent(bookingDate || '')}/${encodeURIComponent(showtime || '')}`, {
-                      method: 'GET'
-                    }, false); // Disable cache for manual refresh
-                    
-                    if (liveRes.success && liveRes.data) {
-                      const updatedReserved = new Set<string>();
-                      
-                      // The API returns reservedSeats as an array of seat numbers
-                      if (liveRes.data.reservedSeats && Array.isArray(liveRes.data.reservedSeats)) {
-                        liveRes.data.reservedSeats.forEach((seatNumber: string) => {
-                          updatedReserved.add(seatNumber);
-                        });
-                      }
-                      
-                      // Also check the seats object if it exists (fallback)
-                      if (liveRes.data.seats && typeof liveRes.data.seats === 'object') {
-                        Object.values(liveRes.data.seats).forEach((seat: any) => {
-                          if (seat.status === 'reserved' || seat.isReserved) {
-                            updatedReserved.add(`${seat.rowLabel}-${seat.number}`);
-                          }
-                        });
-                      }
-                      
-                      setReservedSeats(updatedReserved);
-                      setLastUpdateTime(new Date());
-                      console.log('🔄 Manual refresh: seats updated', Array.from(updatedReserved));
-                    }
-                  } catch (err) {
-                    console.error('Error during manual refresh:', err);
-                  }
-                }}
-                className="bg-gray-600 text-white px-4 py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors flex items-center gap-2"
-                title="Refresh seat availability"
-              >
-                <span>🔄</span>
-                <span>Refresh</span>
-              </button>
               
-              <button
-                onClick={() => {
-                  // Test: Manually set J6 and J8 as reserved to verify visual indication
-                  const testReserved = new Set<string>();
-                  testReserved.add('J6');
-                  testReserved.add('J8');
-                  setReservedSeats(testReserved);
-                  setLastUpdateTime(new Date());
-                  console.log('🧪 Test: Set J6 and J8 as reserved', Array.from(testReserved));
-                }}
-                className="bg-yellow-600 text-white px-4 py-3 rounded-xl text-sm hover:bg-yellow-700 transition-colors flex items-center gap-2"
-                title="Test: Set J6 and J8 as reserved"
-              >
-                <span>🧪</span>
-                <span>Test</span>
-              </button>
             </div>
           </div>
 
@@ -1115,13 +1058,6 @@ const LiveSeatLayoutPage: React.FC = () => {
 
 
           {/* Real-time Update Indicator */}
-          {lastUpdateTime && (
-            <div className="bg-blue-900/20 border border-blue-500 text-blue-300 px-4 py-2 rounded-lg mb-4 text-center animate-pulse">
-              <div className="text-sm">
-                🔄 Seats updated at {lastUpdateTime.toLocaleTimeString()}
-              </div>
-            </div>
-          )}
 
           {/* Error Message */}
           {bookingError && (

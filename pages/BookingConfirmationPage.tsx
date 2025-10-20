@@ -43,6 +43,9 @@ const BookingConfirmationPage: React.FC = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancellationPolicy, setCancellationPolicy] = useState<any>(null);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [showErrorPopup, setShowErrorPopup] = useState(false);
+  const [popupMessage, setPopupMessage] = useState('');
   
   // Generate QR code URL
   const getQRCodeUrl = (bookingData: BookingDetails) => {
@@ -393,7 +396,8 @@ const BookingConfirmationPage: React.FC = () => {
     
     if (!booking || !isBookingCancellable(booking)) {
       console.log('Booking not cancellable:', { booking, cancellable: isBookingCancellable(booking) });
-      alert('This booking cannot be cancelled. Please check the cancellation policy.');
+      setPopupMessage('This booking cannot be cancelled. Please check the cancellation policy.');
+      setShowErrorPopup(true);
       return;
     }
     
@@ -411,14 +415,17 @@ const BookingConfirmationPage: React.FC = () => {
         setBooking(prev => prev ? { ...prev, status: 'cancelled' } : null);
         setShowCancelModal(false);
         setCancelReason('');
-        alert('Booking cancelled successfully! Refund will be processed within 3-5 business days.');
+        setPopupMessage('Booking cancelled successfully! Refund will be processed within 3-5 business days.');
+        setShowSuccessPopup(true);
       } else {
         console.error('Cancel booking failed:', response.error);
-        alert(response.error || 'Failed to cancel booking');
+        setPopupMessage(response.error || 'Failed to cancel booking');
+        setShowErrorPopup(true);
       }
     } catch (error) {
       console.error('Error cancelling booking:', error);
-      alert(`Failed to cancel booking: ${error.message || 'Please try again.'}`);
+      setPopupMessage(`Failed to cancel booking: ${error.message || 'Please try again.'}`);
+      setShowErrorPopup(true);
     } finally {
       setIsCancelling(false);
     }
@@ -557,29 +564,31 @@ const BookingConfirmationPage: React.FC = () => {
           </div>
         </div>
 
-        {/* QR Code Section */}
-        <div className="bg-gradient-to-br from-brand-gray to-brand-dark rounded-2xl p-8 border border-brand-dark/40 shadow-2xl mb-8">
-          <div className="text-center">
-            <h3 className="text-2xl font-bold text-white mb-6">Digital Ticket</h3>
-            <div className="flex flex-col items-center space-y-4">
-              <div className="bg-white p-4 rounded-xl shadow-lg">
-                <img
-                  src={getQRCodeUrl(booking)}
-                  alt="Booking QR Code"
-                  className="w-48 h-48"
-                  onError={(e) => {
-                    console.error('QR Code failed to load');
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
+        {/* QR Code Section - Only show for confirmed bookings */}
+        {booking.status === 'confirmed' && (
+          <div className="bg-gradient-to-br from-brand-gray to-brand-dark rounded-2xl p-8 border border-brand-dark/40 shadow-2xl mb-8">
+            <div className="text-center">
+              <h3 className="text-2xl font-bold text-white mb-6">Digital Ticket</h3>
+              <div className="flex flex-col items-center space-y-4">
+                <div className="bg-white p-4 rounded-xl shadow-lg">
+                  <img
+                    src={getQRCodeUrl(booking)}
+                    alt="Booking QR Code"
+                    className="w-48 h-48"
+                    onError={(e) => {
+                      console.error('QR Code failed to load');
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+                <p className="text-brand-light-gray text-sm max-w-md">
+                  Show this QR code at the theatre entrance for easy entry. 
+                  The QR code contains all your booking details.
+                </p>
               </div>
-              <p className="text-brand-light-gray text-sm max-w-md">
-                Show this QR code at the theatre entrance for easy entry. 
-                The QR code contains all your booking details.
-              </p>
             </div>
           </div>
-        </div>
+        )}
 
 
         {/* Action Buttons */}
@@ -590,33 +599,16 @@ const BookingConfirmationPage: React.FC = () => {
           >
             🏠 Back to Home
           </button>
-          <button
-            onClick={() => window.print()}
-            className="bg-gray-600 text-white px-8 py-3 rounded-xl hover:bg-gray-700 transition-all duration-300 font-medium"
-          >
-            🖨️ Print Tickets
-          </button>
-          {/* Debug: Always show cancel button for testing */}
-          <button
-            onClick={() => setShowCancelModal(true)}
-            className="bg-red-600 text-white px-8 py-3 rounded-xl hover:bg-red-700 transition-all duration-300 font-medium"
-          >
-            ❌ Cancel Booking (Debug)
-          </button>
+          {/* Print Tickets button - Only show for confirmed bookings */}
+          {booking.status === 'confirmed' && (
+            <button
+              onClick={() => window.print()}
+              className="bg-gray-600 text-white px-8 py-3 rounded-xl hover:bg-gray-700 transition-all duration-300 font-medium"
+            >
+              🖨️ Print Tickets
+            </button>
+          )}
           
-          {/* Debug: Test cancellation logic */}
-          <button
-            onClick={() => {
-              console.log('=== CANCELLATION TEST ===');
-              console.log('Booking:', booking);
-              console.log('Status:', booking?.status);
-              console.log('Is Cancellable:', isBookingCancellable(booking));
-              console.log('Policy:', calculateCancellationPolicy(booking));
-            }}
-            className="bg-yellow-600 text-white px-8 py-3 rounded-xl hover:bg-yellow-700 transition-all duration-300 font-medium"
-          >
-            🧪 Test Logic
-          </button>
           
           {isBookingCancellable(booking) && (
             <button
@@ -700,6 +692,44 @@ const BookingConfirmationPage: React.FC = () => {
                   {isCancelling ? 'Cancelling...' : 
                    !isBookingCancellable(booking) ? 'Cannot Cancel' : 
                    'Cancel Booking'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Success Popup */}
+        {showSuccessPopup && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="text-center">
+                <div className="text-4xl mb-4">✅</div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Success!</h3>
+                <p className="text-gray-600 mb-6">{popupMessage}</p>
+                <button
+                  onClick={() => setShowSuccessPopup(false)}
+                  className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Error Popup */}
+        {showErrorPopup && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="text-center">
+                <div className="text-4xl mb-4">❌</div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Error</h3>
+                <p className="text-gray-600 mb-6">{popupMessage}</p>
+                <button
+                  onClick={() => setShowErrorPopup(false)}
+                  className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  OK
                 </button>
               </div>
             </div>
