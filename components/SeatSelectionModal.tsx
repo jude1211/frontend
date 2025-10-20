@@ -150,8 +150,56 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
       if (response.success) {
         onBookingComplete(response.data.bookingId, response.data.totalAmount);
         onClose();
-        // Navigate to booking confirmation page
-        window.location.href = `/#/booking-confirmation/${response.data.bookingId}`;
+        try { sessionStorage.setItem('currentBookingId', response.data.bookingId); } catch {}
+
+        // Load Razorpay SDK if not present
+        if (!document.getElementById('razorpay-sdk')) {
+          const script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.async = true;
+          script.id = 'razorpay-sdk';
+          document.body.appendChild(script);
+          await new Promise(resolve => {
+            script.onload = resolve as any;
+            script.onerror = resolve as any;
+          });
+        }
+
+        try {
+          const orderRes = await apiService.createPaymentOrder(response.data.bookingId);
+          if (!orderRes.success || !orderRes.data) throw new Error(orderRes.error || 'Failed to create payment order');
+          const { order, keyId } = orderRes.data;
+
+          const options: any = {
+            key: keyId || 'rzp_test_RL5vMta3bKvRd4',
+            amount: order.amount,
+            currency: order.currency || 'INR',
+            name: movieTitle || 'BookNView',
+            description: `${showtime} • Screen ${screenId}`,
+            order_id: order.id,
+            notes: { bookingId: response.data.bookingId },
+            theme: { color: '#EF4444' },
+            handler: async (rzpResp: any) => {
+              const verifyRes = await apiService.verifyPayment({
+                bookingId: response.data.bookingId,
+                razorpay_order_id: rzpResp.razorpay_order_id,
+                razorpay_payment_id: rzpResp.razorpay_payment_id,
+                razorpay_signature: rzpResp.razorpay_signature
+              });
+              if (verifyRes.success && verifyRes.data?.bookingId) {
+                window.location.href = `/#/booking-confirmation/${verifyRes.data.bookingId}`;
+              } else {
+                setError(verifyRes.error || 'Payment verification failed');
+              }
+            },
+            modal: { ondismiss: () => {} }
+          };
+
+          const rzp = new (window as any).Razorpay(options);
+          rzp.open();
+        } catch (e:any) {
+          setError(e?.message || 'Failed to initialize payment');
+        }
       } else {
         setError(response.error || 'Booking failed');
       }

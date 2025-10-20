@@ -52,7 +52,7 @@ const MovieDetailPage: React.FC = () => {
     fetchMovie();
   }, [id]);
 
-  // Fetch cast from TMDB using the backend movie's tmdbId if present in payload
+  // Fetch cast from TMDB using backend proxy (IPv4 + CORS-safe)
   useEffect(() => {
     const fetchCast = async () => {
       try {
@@ -63,7 +63,9 @@ const MovieDetailPage: React.FC = () => {
         if (tmdbId) {
           const apiKey = (import.meta as any).env?.VITE_TMDB_API_KEY;
           if (apiKey) {
-            const resp = await fetch(`https://api.themoviedb.org/3/movie/${tmdbId}/credits?api_key=${apiKey}`);
+            const API_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+            const tmdbUrl = `https://api.themoviedb.org/3/movie/${tmdbId}/credits?api_key=${apiKey}`;
+            const resp = await fetch(`${API_BASE}/proxy/tmdb?url=${encodeURIComponent(tmdbUrl)}`);
             const data = await resp.json();
             fetchedCast = Array.isArray(data?.cast) ? data.cast.slice(0, 12) : [];
           }

@@ -8,7 +8,6 @@ import HomePage from './pages/HomePage';
 import MovieDetailPage from './pages/MovieDetailPage';
 import SeatSelectionPage from './pages/SeatSelectionPage';
 import SnackOrderPage from './pages/SnackOrderPage';
-import CheckoutPage from './pages/CheckoutPage';
 import ProfilePage from './pages/ProfilePage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import AdminLoginPage from './pages/AdminLoginPage';
@@ -49,7 +48,6 @@ const App: React.FC = () => {
                 <Route path="/booking-confirmation/:bookingId" element={<BookingConfirmationPage />} />
                 <Route path="/select-seats/:movieId/:screenId/:bookingDate/:time" element={<SeatSelectionPage />} />
                 <Route path="/snacks" element={<SnackOrderPage />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
                 <Route path="/profile" element={
                   <ProtectedRoute>
                     <ProfilePage />

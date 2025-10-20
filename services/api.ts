@@ -79,6 +79,20 @@ interface AuthResponse {
 }
 
 class ApiService {
+  // Payment APIs
+  async createPaymentOrder(bookingId: string): Promise<ApiResponse<{ order: any; keyId: string }>> {
+    return this.makeRequest<{ order: any; keyId: string }>(`/payments/order`, {
+      method: 'POST',
+      body: JSON.stringify({ bookingId })
+    }, false);
+  }
+
+  async verifyPayment(params: { bookingId: string; razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string; }): Promise<ApiResponse<{ bookingId: string }>> {
+    return this.makeRequest<{ bookingId: string }>(`/payments/verify`, {
+      method: 'POST',
+      body: JSON.stringify(params)
+    }, false);
+  }
   // Live seat layout for a show (with availability)
   async getLiveSeatLayout(screenId: string, bookingDate: string, showtime: string): Promise<ApiResponse<any>> {
     const endpoint = `/seat-layout/${encodeURIComponent(screenId)}/${encodeURIComponent(bookingDate)}/${encodeURIComponent(showtime)}`;

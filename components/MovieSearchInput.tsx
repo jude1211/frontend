@@ -55,6 +55,7 @@ export interface MovieSearchInputProps {
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || 'your-tmdb-api-key-here';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+const API_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 
 const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
@@ -86,7 +87,7 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
 
     try {
       const response = await fetch(
-        `${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}&page=1&include_adult=false`
+        `${API_BASE}/proxy/tmdb?url=${encodeURIComponent(`${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}&page=1&include_adult=false`)}`
       );
       
       if (!response.ok) {
@@ -124,7 +125,7 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
   const fetchMovieDetails = async (movieId: number): Promise<TMDBMovieDetails | null> => {
     try {
       const response = await fetch(
-        `${TMDB_BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=credits,videos`
+        `${API_BASE}/proxy/tmdb?url=${encodeURIComponent(`${TMDB_BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=credits,videos`)}`
       );
       if (!response.ok) {
         throw new Error(`TMDB API error: ${response.status}`);
