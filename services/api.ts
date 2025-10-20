@@ -388,6 +388,79 @@ class ApiService {
     }
   }
 
+  // Movie Ratings
+  async submitMovieRating(movieId: string, rating: number, review?: string, bookingId?: string): Promise<ApiResponse<any>> {
+    console.log('API Service: Submitting movie rating', { movieId, rating, review, bookingId });
+    try {
+      const requestBody: any = { movieId, rating };
+      if (review) requestBody.review = review;
+      if (bookingId) requestBody.bookingId = bookingId;
+      
+      const result = await this.makeRequest<any>('/movie-ratings', {
+        method: 'POST',
+        body: JSON.stringify(requestBody)
+      });
+      console.log('API Service: Submit rating result', result);
+      return result;
+    } catch (error) {
+      console.error('API Service: Submit rating error', error);
+      throw error;
+    }
+  }
+
+  async getMovieRating(movieId: string): Promise<ApiResponse<any>> {
+    console.log('API Service: Getting movie rating', { movieId });
+    try {
+      const result = await this.makeRequest<any>(`/movie-ratings/movie/${movieId}`);
+      console.log('API Service: Get rating result', result);
+      return result;
+    } catch (error) {
+      console.error('API Service: Get rating error', error);
+      throw error;
+    }
+  }
+
+  async updateMovieRating(ratingId: string, rating: number, review?: string): Promise<ApiResponse<any>> {
+    console.log('API Service: Updating movie rating', { ratingId, rating, review });
+    try {
+      const result = await this.makeRequest<any>(`/movie-ratings/${ratingId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ rating, review })
+      });
+      console.log('API Service: Update rating result', result);
+      return result;
+    } catch (error) {
+      console.error('API Service: Update rating error', error);
+      throw error;
+    }
+  }
+
+  async deleteMovieRating(ratingId: string): Promise<ApiResponse<any>> {
+    console.log('API Service: Deleting movie rating', { ratingId });
+    try {
+      const result = await this.makeRequest<any>(`/movie-ratings/${ratingId}`, {
+        method: 'DELETE'
+      });
+      console.log('API Service: Delete rating result', result);
+      return result;
+    } catch (error) {
+      console.error('API Service: Delete rating error', error);
+      throw error;
+    }
+  }
+
+  async getUserRatings(page = 1, limit = 10): Promise<ApiResponse<any>> {
+    console.log('API Service: Getting user ratings', { page, limit });
+    try {
+      const result = await this.makeRequest<any>(`/movie-ratings/user?page=${page}&limit=${limit}`);
+      console.log('API Service: Get user ratings result', result);
+      return result;
+    } catch (error) {
+      console.error('API Service: Get user ratings error', error);
+      throw error;
+    }
+  }
+
   // Admin Movies
   async adminListMovies(page = 1, limit = 20): Promise<ApiResponse<any>> {
     const qs = new URLSearchParams({ page: String(page), limit: String(limit) }).toString();

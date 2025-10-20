@@ -5,6 +5,7 @@ import { apiService } from '../services/api';
 import { Movie } from '../types';
 import TrailerPlayer from '../components/TrailerPlayer';
 import CastScroller from '../components/CastScroller';
+import MovieRating from '../components/MovieRating';
 import { filterValidScreens, getShowtimeStatus, validateShowtime } from '../utils/showtimeValidation';
 
 
@@ -178,7 +179,7 @@ const MovieDetailPage: React.FC = () => {
           </div>
           <h1 className="text-5xl font-bold text-white">{movie.title}</h1>
           <div className="flex items-center space-x-4 text-gray-300">
-            <span className="flex items-center"><i className="fa fa-star text-yellow-400 mr-2"></i> {movie.rating}/10</span>
+            <MovieRating movieId={movie.id} showUserRating={true} />
             <span>{movie.genre}</span>
             <span>{movie.duration}</span>
           </div>

@@ -54,19 +54,20 @@ const BookingHistory: React.FC = () => {
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
   const [popupMessage, setPopupMessage] = useState('');
+  const [userRating, setUserRating] = useState<number>(0);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   useEffect(() => {
     fetchBookings();
-  }, [filter]);
+  }, []); // Only fetch once on component mount
 
   const fetchBookings = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const response = await apiService.getUserBookings({
-        status: filter === 'all' ? undefined : filter
-      });
+      // Always fetch all bookings, then filter on frontend
+      const response = await apiService.getUserBookings();
       
       if (response.success) {
         setBookings(response.data || []);
@@ -79,6 +80,7 @@ const BookingHistory: React.FC = () => {
       setLoading(false);
     }
   };
+
 
   const handleCancelBooking = async () => {
     if (!selectedBooking) return;
@@ -111,9 +113,14 @@ const BookingHistory: React.FC = () => {
     }
   };
 
-  const filteredBookings = bookings.filter(booking => 
-    filter === 'all' || booking.status === filter
-  );
+
+  // Get the display status for a booking (shows "Completed" for watched confirmed bookings)
+  const getDisplayStatus = (booking: Booking) => {
+    if (booking.status === 'confirmed' && isMovieWatched(booking)) {
+      return 'completed';
+    }
+    return booking.status;
+  };
 
   const getStatusColor = (status: Booking['status']) => {
     switch (status) {
@@ -170,6 +177,112 @@ const BookingHistory: React.FC = () => {
     
     // Use QR Server API to generate QR code
     return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrText)}`;
+  };
+
+  // Check if movie has been watched (showtime has passed)
+  const isMovieWatched = (booking: Booking) => {
+    const now = new Date();
+    
+    // Parse the showtime date and time properly
+    let showDateTime;
+    try {
+      let dateStr = booking.showtime.date; // e.g., "2025-10-20" or Date object
+      const timeStr = booking.showtime.time; // e.g., "7:00 PM"
+      
+      // Ensure dateStr is a string
+      if (dateStr instanceof Date) {
+        dateStr = dateStr.toISOString().split('T')[0]; // Convert to YYYY-MM-DD format
+      } else if (typeof dateStr === 'string' && dateStr.includes('T')) {
+        dateStr = dateStr.split('T')[0]; // Extract just the date part
+      }
+      
+      // Convert time to 24-hour format if needed
+      let time24 = timeStr;
+      if (timeStr.includes('AM') || timeStr.includes('PM')) {
+        const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (timeMatch) {
+          let hours = parseInt(timeMatch[1]);
+          const minutes = timeMatch[2];
+          const period = timeMatch[3].toUpperCase();
+
+          if (period === 'PM' && hours !== 12) {
+            hours += 12;
+          } else if (period === 'AM' && hours === 12) {
+            hours = 0;
+          }
+
+          time24 = `${hours.toString().padStart(2, '0')}:${minutes}`;
+        }
+      }
+      
+      // Create the full datetime string
+      const dateTimeStr = `${dateStr}T${time24}:00`;
+      showDateTime = new Date(dateTimeStr);
+      
+      if (isNaN(showDateTime.getTime())) {
+        // Fallback to just the date if time parsing fails
+        showDateTime = new Date(booking.showtime.date);
+      }
+    } catch (error) {
+      console.error('Error parsing showtime in isMovieWatched:', error);
+      // Fallback to just the date if parsing fails
+      showDateTime = new Date(booking.showtime.date);
+    }
+    
+    return now > showDateTime; // Movie is watched if current time is after showtime
+  };
+
+  // Filter bookings based on the selected filter
+  const filteredBookings = bookings.filter(booking => {
+    if (filter === 'all') return true;
+    if (filter === 'confirmed') {
+      // Upcoming: confirmed bookings that haven't been watched yet
+      return booking.status === 'confirmed' && !isMovieWatched(booking);
+    }
+    if (filter === 'completed') {
+      // Completed: confirmed bookings that have been watched (showtime passed)
+      return booking.status === 'confirmed' && isMovieWatched(booking);
+    }
+    if (filter === 'cancelled') {
+      // Cancelled: any booking with cancelled status
+      return booking.status === 'cancelled';
+    }
+    return false;
+  });
+
+  // Handle rating submission
+  const handleRatingSubmit = async (rating: number) => {
+    if (!selectedBooking) return;
+    
+    try {
+      setIsSubmittingRating(true);
+      
+      console.log('Selected booking for rating:', selectedBooking);
+      console.log('Movie ID:', selectedBooking.movie.movieId);
+      console.log('Booking ID:', selectedBooking.bookingId);
+      
+      // Submit rating to backend
+      const response = await apiService.submitMovieRating(
+        selectedBooking.movie.movieId,
+        rating,
+        undefined, // review (optional)
+        selectedBooking.bookingId
+      );
+      
+      if (response.success) {
+        setPopupMessage(`Thank you for rating "${selectedBooking.movie.title}" ${rating}/10!`);
+        setShowSuccessPopup(true);
+        setUserRating(rating);
+      } else {
+        setPopupMessage(response.error || 'Failed to submit rating. Please try again.');
+        setShowErrorPopup(true);
+      }
+    } catch (error) {
+      setPopupMessage('Failed to submit rating. Please try again.');
+      setShowErrorPopup(true);
+    } finally {
+      setIsSubmittingRating(false);
+    }
   };
 
   const isCancellable = (booking: Booking) => {
@@ -339,9 +452,9 @@ const BookingHistory: React.FC = () => {
                     </div>
 
                     <div className="text-right">
-                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
-                        <i className={`fa ${getStatusIcon(booking.status)} mr-1`}></i>
-                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(getDisplayStatus(booking))}`}>
+                        <i className={`fa ${getStatusIcon(getDisplayStatus(booking))} mr-1`}></i>
+                        {getDisplayStatus(booking).charAt(0).toUpperCase() + getDisplayStatus(booking).slice(1)}
                       </div>
                       <p className="text-xl font-bold text-white mt-2">
                         ₹{booking.pricing.totalAmount.toFixed(2)}
@@ -429,8 +542,8 @@ const BookingHistory: React.FC = () => {
                   </div>
                 )}
 
-                {/* QR Code - Show for confirmed bookings */}
-                {selectedBooking.status === 'confirmed' && (
+                {/* QR Code - Show for confirmed bookings that haven't been watched yet */}
+                {selectedBooking.status === 'confirmed' && !isMovieWatched(selectedBooking) && (
                   <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
                     <h4 className="text-lg font-semibold text-green-400 mb-2">Ticket QR Code</h4>
                     <div className="flex flex-col items-center space-y-3">
@@ -451,6 +564,39 @@ const BookingHistory: React.FC = () => {
                       <p className="text-xs text-gray-400 text-center">
                         Booking ID: {selectedBooking.bookingId}
                       </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Movie Rating - Show for watched movies */}
+                {selectedBooking.status === 'confirmed' && isMovieWatched(selectedBooking) && (
+                  <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
+                    <h4 className="text-lg font-semibold text-purple-400 mb-2">Rate Your Experience</h4>
+                    <div className="flex flex-col items-center space-y-3">
+                      <p className="text-sm text-gray-300 text-center">
+                        How was your experience watching "{selectedBooking.movie.title}"?
+                      </p>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+                          <button
+                            key={rating}
+                            onClick={() => handleRatingSubmit(rating)}
+                            disabled={isSubmittingRating}
+                            className={`w-10 h-10 rounded-full border-2 transition-colors flex items-center justify-center text-sm font-medium ${
+                              userRating >= rating
+                                ? 'bg-yellow-400 border-yellow-400 text-black hover:bg-yellow-300'
+                                : 'bg-transparent border-gray-400 text-gray-400 hover:border-yellow-400 hover:text-yellow-400'
+                            } ${isSubmittingRating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            {rating}
+                          </button>
+                        ))}
+                      </div>
+                      {userRating > 0 && (
+                        <p className="text-sm text-green-400">
+                          Thank you for rating this movie {userRating}/10!
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -476,7 +622,8 @@ const BookingHistory: React.FC = () => {
 
                 {/* Actions */}
                 <div className="flex space-x-4">
-                  {selectedBooking.status === 'confirmed' && isCancellable(selectedBooking) && (
+                  {/* Cancel button - only show for confirmed bookings that haven't been watched and are cancellable */}
+                  {selectedBooking.status === 'confirmed' && !isMovieWatched(selectedBooking) && isCancellable(selectedBooking) && (
                     <button 
                       onClick={() => setShowCancelModal(true)}
                       className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors"
@@ -484,7 +631,8 @@ const BookingHistory: React.FC = () => {
                       Cancel Booking
                     </button>
                   )}
-                  {selectedBooking.status === 'confirmed' && !isCancellable(selectedBooking) && (
+                  {/* Cannot cancel button - only show for confirmed bookings that haven't been watched but are not cancellable */}
+                  {selectedBooking.status === 'confirmed' && !isMovieWatched(selectedBooking) && !isCancellable(selectedBooking) && (
                     <button 
                       disabled
                       className="flex-1 bg-gray-600 text-gray-300 py-2 px-4 rounded-md cursor-not-allowed"
@@ -492,6 +640,7 @@ const BookingHistory: React.FC = () => {
                       Cannot Cancel (Less than 2 hours before show)
                     </button>
                   )}
+                  {/* Download Ticket button - show for all bookings */}
                   <button className="flex-1 bg-brand-red text-white py-2 px-4 rounded-md hover:bg-red-600 transition-colors">
                     Download Ticket
                   </button>

@@ -2,6 +2,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Movie } from '../types';
+import MovieRating from './MovieRating';
 
 interface MovieCardProps {
   movie: Movie;
@@ -21,9 +22,8 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
           />
           {/* Overlay with rating */}
           <div className="absolute top-3 right-3">
-            <div className="bg-black/70 text-white px-2 py-1 rounded-full text-xs font-bold flex items-center">
-              <span className="text-yellow-400 mr-1">⭐</span>
-              {movie.rating}
+            <div className="bg-black/70 text-white px-2 py-1 rounded-full text-xs font-bold">
+              <MovieRating movieId={movie.id} className="text-xs" />
             </div>
           </div>
           
@@ -49,6 +49,11 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
           <div className="flex items-center justify-between mb-3">
             <span className="text-gray-400 text-sm">{movie.genre.split('/')[0]}</span>
             <span className="text-brand-red text-sm font-semibold">{movie.duration}</span>
+          </div>
+
+          {/* Rating display */}
+          <div className="mb-3">
+            <MovieRating movieId={movie.id} className="text-sm" />
           </div>
 
           {/* Genre tags */}
