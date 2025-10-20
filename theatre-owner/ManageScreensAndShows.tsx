@@ -651,6 +651,16 @@ const ManageScreensAndShows: React.FC = () => {
                   {plannedChips.map((t, idx) => (
                     <span key={`${t}-${idx}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-emerald-500/15 text-emerald-200 border border-emerald-400/30">
                       <i className="fas fa-clock"></i>{t}
+                      <button
+                        onClick={() => {
+                          const updatedChips = plannedChips.filter((_, i) => i !== idx);
+                          setShowtimesInput(updatedChips.join(', '));
+                        }}
+                        className="ml-1 hover:bg-emerald-400/20 rounded-full p-0.5 transition-colors"
+                        title="Remove showtime"
+                      >
+                        <i className="fas fa-times text-[10px]"></i>
+                      </button>
                     </span>
                   ))}
                 </div>

@@ -26,6 +26,49 @@ const TheatreOwnerDashboard: React.FC = () => {
     redirectPath: '/theatre-owner/dashboard',
     shouldPrevent: true 
   });
+
+  // Additional back navigation prevention for theatre owners
+  useEffect(() => {
+    const theatreOwnerToken = localStorage.getItem('theatreOwnerToken');
+    if (!theatreOwnerToken) return;
+
+    // Function to prevent back navigation
+    const preventBackNavigation = () => {
+      // Push current state to prevent going back
+      window.history.pushState(null, '', '/theatre-owner/dashboard');
+    };
+
+    // Handle back button press
+    const handlePopState = (event: PopStateEvent) => {
+      // Replace the current history entry with dashboard
+      window.history.replaceState(null, '', '/theatre-owner/dashboard');
+      // Force navigation to dashboard
+      navigate('/theatre-owner/dashboard', { replace: true });
+    };
+
+    // Add event listeners
+    window.addEventListener('popstate', handlePopState);
+    
+    // Push initial state to prevent back navigation
+    window.history.pushState(null, '', '/theatre-owner/dashboard');
+
+    // Disable browser back button completely
+    const disableBackButton = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.history.pushState(null, '', '/theatre-owner/dashboard');
+    };
+
+    // Add multiple event listeners to prevent back navigation
+    window.addEventListener('beforeunload', disableBackButton);
+    window.addEventListener('popstate', disableBackButton);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', disableBackButton);
+    };
+  }, [navigate]);
   
   const [theatreOwner, setTheatreOwner] = useState<TheatreOwner | null>(null);
   const [loading, setLoading] = useState(true);
@@ -309,7 +352,6 @@ const TheatreOwnerDashboard: React.FC = () => {
         {/* Dynamic Content Based on Active Section */}
         {activeSection === 'dashboard' && (
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <h2 className="text-xl font-bold text-white mb-4">🚀 Coming Soon</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <button onClick={() => navigate('/theatre-owner/shows')} className="bg-gray-700 rounded-lg p-4 text-left hover:bg-gray-600 transition">
                 <h3 className="text-white font-semibold mb-2">Show Management</h3>

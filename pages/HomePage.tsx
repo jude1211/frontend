@@ -15,6 +15,15 @@ const HomePage: React.FC = () => {
   const [allMovies, setAllMovies] = useState<any[]>([]);
   const [comingSoon, setComingSoon] = useState<any[]>([]);
 
+  // Check for theatre owner authentication and redirect
+  useEffect(() => {
+    const theatreOwnerToken = localStorage.getItem('theatreOwnerToken');
+    if (theatreOwnerToken) {
+      // Theatre owner is logged in, redirect to dashboard
+      navigate('/theatre-owner/dashboard', { replace: true });
+    }
+  }, [navigate]);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentBanner((prev) => (prev + 1) % Math.max(movies.length, 1));
@@ -172,22 +181,6 @@ const HomePage: React.FC = () => {
                   releaseDate: movie.releaseDate,
                   advanceBookingEnabled: movie.advanceBookingEnabled
                 }} />
-                <div className="mt-2 text-xs text-gray-400">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-green-400">●</span>
-                    <span>{movie.screens?.length || 0} Screen(s)</span>
-                    <span className="text-gray-500">•</span>
-                    <span>{movie.language}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {(movie.showtimes || []).map((t: string, i: number) => (
-                      <span key={i} className="bg-brand-dark text-white px-2 py-0.5 rounded">{t}</span>
-                    ))}
-                    {movie.showtimes?.length === 0 && (
-                      <span className="text-gray-500 italic">No showtimes</span>
-                    )}
-                  </div>
-                </div>
               </div>
             ))}
           </div>

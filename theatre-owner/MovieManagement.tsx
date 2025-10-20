@@ -178,26 +178,6 @@ const MovieManagement: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
 
-    // Special handling for showtimes: allow only numbers, colon, comma, spaces, and am/pm letters
-    if (name === 'showtimes') {
-      // Keep only allowed characters
-      const sanitized = value.replace(/[^0-9:apm,\s]/gi, '');
-      // Normalize whitespace and AM/PM casing while typing
-      const normalized = sanitized
-        .replace(/\s+/g, ' ')
-        .replace(/\b(am|pm)\b/gi, (m) => m.toUpperCase());
-
-      setFormData(prev => ({
-        ...prev,
-        showtimes: normalized
-      }));
-
-      // Clear error when user starts typing
-      if (errors.showtimes) {
-        setErrors(prev => ({ ...prev, showtimes: '' }));
-      }
-      return;
-    }
 
     setFormData(prev => ({
       ...prev,
@@ -212,15 +192,6 @@ const MovieManagement: React.FC = () => {
     }
   };
 
-  const validateShowtimes = (input: string): boolean => {
-    if (!input.trim()) return false;
-    const tokens = input.split(',').map(t => t.trim()).filter(Boolean);
-    if (tokens.length === 0) return false;
-
-    // H:MM AM/PM, hours 1-12 without leading zero
-    const timeRegex = /^(1[0-2]|[1-9]):[0-5][0-9]\s?(AM|PM)$/i;
-    return tokens.every(token => timeRegex.test(token));
-  };
 
   const validateForm = (): boolean => {
     const newErrors: Partial<MovieFormData> = {};
@@ -228,7 +199,6 @@ const MovieManagement: React.FC = () => {
     if (!formData.title.trim()) newErrors.title = 'Title is required';
     if (!formData.genre.trim()) newErrors.genre = 'Genre is required';
     if (!formData.duration.trim()) newErrors.duration = 'Duration is required';
-    if (!formData.showtimes.trim()) newErrors.showtimes = 'Showtimes are required';
 
     // Accept formats like "2h 30m", "2h", or "150m"
     const durationText = formData.duration ? formData.duration.trim() : '';
@@ -237,10 +207,6 @@ const MovieManagement: React.FC = () => {
       newErrors.duration = 'Use formats like 2h 30m, 2h, or 150m';
     }
 
-    // Validate showtimes format (H:MM AM/PM) and no leading zero hour
-    if (formData.showtimes && !validateShowtimes(formData.showtimes)) {
-      newErrors.showtimes = 'Use H:MM AM/PM, hours 1-12 (e.g., 9:30 AM, 12:05 PM)';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -264,7 +230,7 @@ const MovieManagement: React.FC = () => {
         duration: formData.duration,
         posterUrl: formData.posterUrl,
         status: formData.status,
-        showtimes: formData.showtimes.split(',').map(s => s.trim().replace(/\s+/g, ' ').toUpperCase()),
+        showtimes: [],
         description: formData.description,
         director: formData.director,
         cast: formData.cast ? formData.cast.split(',').map(c => c.trim()) : [],
@@ -778,32 +744,6 @@ const MovieManagement: React.FC = () => {
                     </select>
                   </div>
 
-                  {/* Showtimes */}
-                  <div className="md:col-span-2">
-                    <label htmlFor="showtimes" className="block text-sm font-medium text-white mb-2">
-                      Showtimes *
-                    </label>
-                    <input
-                      type="text"
-                      id="showtimes"
-                      name="showtimes"
-                      value={formData.showtimes}
-                      onChange={handleInputChange}
-                      className={`w-full px-4 py-3 bg-brand-dark border rounded-xl text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red ${
-                        errors.showtimes ? 'border-red-500' : 'border-brand-dark/30'
-                      }`}
-                      placeholder="e.g., 10:00 AM, 1:30 PM, 7:30 PM"
-                    />
-                    {errors.showtimes && (
-                      <p className="text-red-400 text-sm mt-1 flex items-center">
-                        <span className="mr-1">⚠</span>
-                        {errors.showtimes}
-                      </p>
-                    )}
-                    <p className="text-brand-light-gray text-sm mt-1">
-                      Separate multiple showtimes with commas. Format: H:MM AM/PM
-                    </p>
-                  </div>
 
                   {/* Poster URL */}
                   <div className="md:col-span-2">
@@ -1016,14 +956,6 @@ const MovieManagement: React.FC = () => {
                     </div>
                   )}
                   
-                  <div>
-                    <p className="text-brand-light-gray text-sm mb-2">Showtimes:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {(formData.showtimes ? formData.showtimes.split(',').map(s => s.trim().replace(/\s+/g, ' ').toUpperCase()) : ['10:00 AM', '1:30 PM']).map((time, i) => (
-                        <span key={i} className="bg-brand-dark text-white px-2 py-1 rounded text-xs">{time}</span>
-                      ))}
-                    </div>
-                  </div>
                   
                   {/* Description preview */}
                   {formData.description && (

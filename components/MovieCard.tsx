@@ -32,9 +32,11 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
             <div className="absolute bottom-0 left-0 right-0 p-4">
               <div className="flex items-center justify-between text-white">
                 <span className="text-sm font-semibold">{movie.duration}</span>
-                <button onClick={(e)=>{ e.preventDefault(); navigate(`/landing?movie=${encodeURIComponent(String(movie.id))}`); }} className="bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-600 transition-colors">
-                  Book Now
-                </button>
+                {movie.status === 'Now Showing' && (
+                  <button onClick={(e)=>{ e.preventDefault(); navigate(`/landing?movie=${encodeURIComponent(String(movie.id))}`); }} className="bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-600 transition-colors">
+                    Book Now
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -51,10 +53,6 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
             <span className="text-brand-red text-sm font-semibold">{movie.duration}</span>
           </div>
 
-          {/* Rating display */}
-          <div className="mb-3">
-            <MovieRating movieId={movie.id} className="text-sm" />
-          </div>
 
           {/* Genre tags */}
           <div className="flex flex-wrap gap-1 mb-3">
@@ -70,10 +68,6 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
 
           {/* Action buttons */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <span className="text-yellow-400 text-sm">⭐</span>
-              <span className="text-white text-sm font-semibold">{movie.rating}/10</span>
-            </div>
             <div className="flex space-x-2">
               <button className="text-gray-400 hover:text-brand-red transition-colors">
                 <i className="far fa-heart"></i>

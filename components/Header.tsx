@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import Modal from './Modal';
@@ -10,12 +10,16 @@ import LoginModal from './LoginModal';
 const Header: React.FC = () => {
   const { city, setCity, isDetectingCity, detectCity } = useAppContext();
   const { isAuthenticated, userData, logout, clearMessages } = useAuth();
+  const location = useLocation();
   const [isCityModalOpen, setIsCityModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [detectionError, setDetectionError] = useState('');
   const [detectionSuccess, setDetectionSuccess] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [theatreOwnerData, setTheatreOwnerData] = useState<any>(null);
+
+  // Check if we're on any theatre owner page
+  const isTheatreOwnerPage = location.pathname.startsWith('/theatre-owner');
 
   // Check for theatre owner authentication
   useEffect(() => {
@@ -88,32 +92,38 @@ const Header: React.FC = () => {
               <Link to="/" className="text-2xl font-bold text-brand-red">
                 BookNView
               </Link>
-              <nav className="hidden md:flex space-x-6">
-                <Link to="/" className="text-white hover:text-brand-red transition-colors">
-                  Home
-                </Link>
-              </nav>
-              <div className="hidden md:flex relative">
-                <i className="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                <input
-                  type="text"
-                  placeholder="Search for Movies, Events, Plays..."
-                  className="bg-white text-black rounded-md py-2 pl-10 pr-4 w-96 focus:outline-none"
-                />
-              </div>
+              {!isTheatreOwnerPage && (
+                <nav className="hidden md:flex space-x-6">
+                  <Link to="/" className="text-white hover:text-brand-red transition-colors">
+                    Home
+                  </Link>
+                </nav>
+              )}
+              {!isTheatreOwnerPage && (
+                <div className="hidden md:flex relative">
+                  <i className="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                  <input
+                    type="text"
+                    placeholder="Search for Movies, Events, Plays..."
+                    className="bg-white text-black rounded-md py-2 pl-10 pr-4 w-96 focus:outline-none"
+                  />
+                </div>
+              )}
             </div>
             <div className="flex items-center space-x-4">
-              <button 
-                onClick={() => {
-                  setIsCityModalOpen(true);
-                  resetDetectionState();
-                }} 
-                className="flex items-center space-x-2 hover:bg-brand-dark px-3 py-2 rounded-md transition-colors"
-              >
-                <i className="fa fa-map-marker-alt text-brand-red"></i>
-                <span>{city}</span>
-                <i className="fa fa-chevron-down text-xs"></i>
-              </button>
+              {!isTheatreOwnerPage && (
+                <button 
+                  onClick={() => {
+                    setIsCityModalOpen(true);
+                    resetDetectionState();
+                  }} 
+                  className="flex items-center space-x-2 hover:bg-brand-dark px-3 py-2 rounded-md transition-colors"
+                >
+                  <i className="fa fa-map-marker-alt text-brand-red"></i>
+                  <span>{city}</span>
+                  <i className="fa fa-chevron-down text-xs"></i>
+                </button>
+              )}
               {isTheatreOwnerLoggedIn && theatreOwnerData ? (
                 <div className="relative group">
                   <button className="flex items-center space-x-2 text-white px-3 py-2 rounded-md">
