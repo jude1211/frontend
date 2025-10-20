@@ -703,11 +703,6 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                         draggable={editMode}
                                         onDragStart={onDragStart(tierIndex, rowIdx, colIdx)}
                                           onDragEnd={onDragEnd}
-                                        onClick={() => onSeatClick?.(`${cell.rowLabel}-${cell.number}`, { 
-                                          rowLabel: cell.rowLabel, 
-                                          columnNumber: cell.number, 
-                                          seatClass: tier.rule 
-                                        })}
                                           onContextMenu={(e) => {
                                             e.preventDefault();
                                             if (isActive === false) {

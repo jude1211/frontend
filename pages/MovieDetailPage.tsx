@@ -250,7 +250,7 @@ const MovieDetailPage: React.FC = () => {
                 <i className="fas fa-chevron-left text-lg"></i>
               </button>
               
-              <div className="flex space-x-2 overflow-x-auto">
+              <div className="flex space-x-2 flex-wrap justify-center">
                 {dateOptions.map((dateOption) => (
                   <button
                     key={dateOption.value}

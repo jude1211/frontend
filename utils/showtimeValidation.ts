@@ -16,6 +16,7 @@ export interface ShowGroup {
   theatre?: string;
   theatreId?: string;
   availableSeats?: number;
+  runningDates?: string[]; // Array of all running dates for this show
 }
 
 export interface Screen {
@@ -171,6 +172,22 @@ export function filterValidShowGroups(
 }
 
 /**
+ * Checks if any date in runningDates array is still valid (not past)
+ * @param runningDates - Array of dates in YYYY-MM-DD format
+ * @returns boolean indicating if any running date is still valid
+ */
+export function hasValidRunningDates(runningDates: string[]): boolean {
+  if (!Array.isArray(runningDates) || runningDates.length === 0) {
+    return false;
+  }
+  
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Check if any running date is today or in the future
+  return runningDates.some(date => date >= today);
+}
+
+/**
  * Filters screens to remove past showtimes
  * @param screens - Array of screens
  * @param bufferMinutes - Buffer time before showtime when booking should be disabled
@@ -184,6 +201,29 @@ export function filterValidScreens(
     ...screen,
     showGroups: filterValidShowGroups(screen.showGroups, bufferMinutes)
   })).filter(screen => screen.showGroups.length > 0);
+}
+
+/**
+ * Filters screens to remove past showtimes, considering runningDates
+ * @param screens - Array of screens
+ * @param bufferMinutes - Buffer time before showtime when booking should be disabled
+ * @returns Filtered screens
+ */
+export function filterValidScreensWithRunningDates(
+  screens: Screen[], 
+  bufferMinutes: number = 30
+): Screen[] {
+  return screens.map(screen => ({
+    ...screen,
+    showGroups: filterValidShowGroups(screen.showGroups, bufferMinutes)
+  })).filter(screen => {
+    // Keep screen if it has valid show groups OR if any show group has valid running dates
+    const hasValidShowGroups = screen.showGroups.length > 0;
+    const hasValidRunningDates = screen.showGroups.some(group => 
+      group.runningDates && hasValidRunningDates(group.runningDates)
+    );
+    return hasValidShowGroups || hasValidRunningDates;
+  });
 }
 
 /**

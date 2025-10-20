@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import SeatLayoutBuilder, { SeatLayoutConfig } from '../components/SeatLayoutBuilder';
 import BookNViewLoader from '../components/BookNViewLoader';
-import { filterValidScreens, getShowtimeStatus } from '../utils/showtimeValidation';
+import { filterValidScreensWithRunningDates, getShowtimeStatus } from '../utils/showtimeValidation';
 
 interface Movie {
   _id: string;
@@ -64,7 +64,7 @@ const DynamicMovieLanding: React.FC = () => {
           // Filter out past showtimes for each movie bundle
           const filteredBundles = response.data.map(bundle => ({
             ...bundle,
-            screens: filterValidScreens(bundle.screens)
+            screens: filterValidScreensWithRunningDates(bundle.screens)
           })).filter(bundle => bundle.screens.length > 0);
           
           setMovieBundles(filteredBundles);
