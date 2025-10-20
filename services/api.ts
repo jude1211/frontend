@@ -979,6 +979,16 @@ class ApiService {
     });
   }
 
+  async cleanupPastScreenShows(screenId: string): Promise<ApiResponse<{ deletedCount: number }>> {
+    const token = localStorage.getItem('theatreOwnerToken');
+    return this.makeRequest<{ deletedCount: number }>(`/screens/${encodeURIComponent(screenId)}/shows/cleanup`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
   // Movie advance booking management
   async updateMovieAdvanceBooking(movieId: string, enabled: boolean): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');

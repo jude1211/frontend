@@ -13,7 +13,8 @@ const ManageScreensAndShows: React.FC = () => {
   const [shows, setShows] = useState<any[]>([]);
   const [showtimeError, setShowtimeError] = useState<string | null>(null);
   const [bookingDate, setBookingDate] = useState<string>(''); // YYYY-MM-DD
-  const [maxAdvanceDays, setMaxAdvanceDays] = useState<number>(3);
+  // Running days is inclusive: 3 means today through today+2
+  const [runningDays, setRunningDays] = useState<number>(3);
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [popupContent, setPopupContent] = useState<{ title?: string; message: string }>({ message: '' });
   const [movieFilter, setMovieFilter] = useState<'all' | 'now_showing' | 'coming_soon'>('all');
@@ -28,7 +29,13 @@ const ManageScreensAndShows: React.FC = () => {
   const [editScreenId, setEditScreenId] = useState<string>('');
   const [editShowtimesInput, setEditShowtimesInput] = useState<string>('');
   const [availableTimings, setAvailableTimings] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
   const [loadingScreens, setLoadingScreens] = useState<boolean>(false);
   const [screensError, setScreensError] = useState<string | null>(null);
 
@@ -114,7 +121,8 @@ const ManageScreensAndShows: React.FC = () => {
     const loadShows = async () => {
       if (!selectedScreenId) return setShows([]);
       try {
-        // Fetch ALL shows for the selected screen, not just for a specific date
+        // Cleanup past shows for this screen, then fetch all current/future shows
+        try { await apiService.cleanupPastScreenShows(selectedScreenId); } catch {}
         const res = await apiService.getScreenShows(selectedScreenId);
         if (res.success) setShows(res.data || []);
       } catch {}
@@ -122,11 +130,20 @@ const ManageScreensAndShows: React.FC = () => {
     loadShows();
   }, [selectedScreenId]);
   // --- Booking date helpers ---
-  const getTodayIso = (): string => new Date().toISOString().slice(0,10);
+  const getTodayIso = (): string => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
   const addDaysIso = (base: string, days: number): string => {
-    const d = new Date(base + 'T00:00:00');
+    const d = new Date(base + 'T00:00:00'); // interpret as local midnight
     d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0,10);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   };
 
   // --- Movie status and runtime helpers ---
@@ -383,7 +400,7 @@ const ManageScreensAndShows: React.FC = () => {
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
           <div className="mb-4">
             <label className="block text-sm text-gray-400 mb-2">Select Date for Show Assignment</label>
-            <input
+              <input
               type="date"
               value={selectedDate}
               onChange={(e) => {
@@ -398,6 +415,8 @@ const ManageScreensAndShows: React.FC = () => {
                     }
                   } catch {}
                 }
+                  // Ensure booking date starts at the selected assignment date
+                  setBookingDate(e.target.value);
               }}
               min={new Date().toISOString().split('T')[0]}
               className="w-64 bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2"
@@ -546,14 +565,25 @@ const ManageScreensAndShows: React.FC = () => {
               <input
                 type="date"
                 value={bookingDate}
-                min={getTodayIso()}
-                max={addDaysIso(getTodayIso(), Math.max(0, maxAdvanceDays))}
+                min={selectedDate}
+                max={addDaysIso(selectedDate, Math.max(0, (runningDays || 1) - 1))}
                 onChange={(e)=> setBookingDate(e.target.value)}
                 className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2"
               />
               <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
-                <span>Limit days:</span>
-                <input type="number" min={0} max={14} value={maxAdvanceDays} onChange={(e)=> setMaxAdvanceDays(Math.min(14, Math.max(0, parseInt(e.target.value||'0',10))))} className="w-16 bg-black/40 border border-gray-700 text-white rounded px-2 py-1" />
+                <span>Running days:</span>
+                <input 
+                  type="number" 
+                  min={1} 
+                  max={14} 
+                  value={runningDays}
+                  onChange={(e)=> {
+                    const v = Math.min(14, Math.max(1, parseInt(e.target.value||'1',10)));
+                    setRunningDays(v);
+                  }} 
+                  className="w-16 bg-black/40 border border-gray-700 text-white rounded px-2 py-1" 
+                />
+                <span>(max date auto-sets to today + {(runningDays||1)-1} day(s))</span>
               </div>
               {selectedMovieId && (() => {
                 const selectedMovie = ownerMovies.find(m => m._id === selectedMovieId);
@@ -645,7 +675,13 @@ const ManageScreensAndShows: React.FC = () => {
             const existing = getExistingShowIntervals(shows);
             const extErr = detectOverlapAgainstExisting(times, durationMin, existing) || hasExactDuplicateAgainstExisting(times, shows);
             if (extErr) { setShowtimeError(extErr); return; }
-            const res = await apiService.saveScreenShows(selectedScreenId, selectedMovieId, times, bookingDate || getTodayIso(), maxAdvanceDays);
+            const res = await apiService.saveScreenShows(
+              selectedScreenId, 
+              selectedMovieId, 
+              times, 
+              bookingDate || getTodayIso(), 
+              Math.max(0, (runningDays || 1) - 1)
+            );
             if (res.success) {
               setShowtimesInput('');
               try {
@@ -781,6 +817,22 @@ const ManageScreensAndShows: React.FC = () => {
                             Booking Date: {sh.bookingDate || 'Not specified'}
                           </div>
                           {(() => {
+                            // Show running dates from database if available
+                            if (sh.runningDates && Array.isArray(sh.runningDates) && sh.runningDates.length > 0) {
+                              const sortedDates = [...sh.runningDates].sort();
+                              const startDate = sortedDates[0];
+                              const endDate = sortedDates[sortedDates.length - 1];
+                              const daysCount = sortedDates.length;
+                              
+                              return (
+                                <div>
+                                  <i className="fas fa-clock mr-1"></i>
+                                  Running for {daysCount} day{daysCount !== 1 ? 's' : ''} ({startDate} to {endDate})
+                                </div>
+                              );
+                            }
+                            
+                            // Fallback to calculated runtime days
                             const movie = ownerMovies.find(m => m._id === sh.movieId?._id || sh.movieId);
                             if (movie) {
                               const { status, runtimeDays } = calculateMovieStatus(movie);
@@ -870,7 +922,13 @@ const ManageScreensAndShows: React.FC = () => {
                         if (newMovieId !== originalMovieId || newScreenId !== originalScreenId) {
                           try { await apiService.deleteScreenShow(originalScreenId, sh._id); } catch {}
                         }
-                        const save = await apiService.saveScreenShows(newScreenId, newMovieId, parsed, bookingDate || getTodayIso(), maxAdvanceDays);
+                        const save = await apiService.saveScreenShows(
+                          newScreenId, 
+                          newMovieId, 
+                          parsed, 
+                          bookingDate || getTodayIso(), 
+                          Math.max(0, (runningDays || 1) - 1)
+                        );
                         if (save.success) {
                           setEditingId(null);
                           try {

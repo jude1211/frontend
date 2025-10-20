@@ -7,6 +7,7 @@ import TrailerPlayer from '../components/TrailerPlayer';
 import CastScroller from '../components/CastScroller';
 import MovieRating from '../components/MovieRating';
 import { filterValidScreens, getShowtimeStatus, validateShowtime } from '../utils/showtimeValidation';
+import { generateDateOptionsFromShows, getNextAvailableDate, formatDateForDisplay } from '../utils/dateUtils';
 
 
 const MovieDetailPage: React.FC = () => {
@@ -18,6 +19,9 @@ const MovieDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [trailerLoading, setTrailerLoading] = useState(false);
   const [cast, setCast] = useState<Array<{ name:string; character:string; profilePath?: string }>>([]);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [dateOptions, setDateOptions] = useState<any[]>([]);
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchMovie = async () => {
@@ -78,6 +82,16 @@ const MovieDetailPage: React.FC = () => {
     if (id) fetchCast();
   }, [id]);
 
+  // Generate date options from available show dates
+  useEffect(() => {
+    if (availableDates.length > 0) {
+      const options = generateDateOptionsFromShows(availableDates, selectedDate);
+      setDateOptions(options);
+    } else {
+      setDateOptions([]);
+    }
+  }, [availableDates, selectedDate]);
+
   useEffect(() => {
     const fetchShowtimes = async () => {
       try {
@@ -86,19 +100,49 @@ const MovieDetailPage: React.FC = () => {
           // Filter out past showtimes using the validation utility
           const validScreens = filterValidScreens(res.data);
           setScreens(validScreens);
+          
+          // Extract unique dates from the showtimes data
+          const dates = new Set<string>();
+          validScreens.forEach(screen => {
+            screen.showGroups.forEach((group: any) => {
+              dates.add(group.bookingDate);
+            });
+          });
+          
+          const sortedDates = Array.from(dates).sort();
+          setAvailableDates(sortedDates);
+          
+          // Set the first available date as selected if no date is currently selected
+          if (sortedDates.length > 0 && !selectedDate) {
+            setSelectedDate(sortedDates[0]);
+          }
         } else {
           setScreens([]);
+          setAvailableDates([]);
         }
       } catch {
         setScreens([]);
+        setAvailableDates([]);
       }
     };
     fetchShowtimes();
-  }, [id]);
+  }, [id, selectedDate]);
 
   const handleShowtimeSelect = (screenId: string, bookingDate: string, time: string) => {
     // Navigate to live seat layout page
     navigate(`/live-seats/${movie?.id}/${screenId}/${bookingDate}/${encodeURIComponent(time)}`);
+  };
+
+  const handleDateSelect = (date: string) => {
+    setSelectedDate(date);
+  };
+
+  // Filter screens to show only showtimes for the selected date
+  const getFilteredScreens = () => {
+    return screens.map(screen => ({
+      ...screen,
+      showGroups: screen.showGroups.filter((group: any) => group.bookingDate === selectedDate)
+    })).filter(screen => screen.showGroups.length > 0);
   };
 
   if (loading) {
@@ -194,19 +238,84 @@ const MovieDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Showtimes */}
+      {/* Date Selection Bar */}
       <div className="bg-brand-gray p-6 rounded-lg">
-        <h2 className="text-3xl font-bold mb-6 text-white">Showtimes</h2>
+        <h2 className="text-3xl font-bold mb-6 text-white">Select Date & Showtimes</h2>
+        
+        {/* Date Selection Bar */}
+        {dateOptions.length > 0 ? (
+          <div className="bg-brand-dark rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <button className="p-2 text-gray-400 hover:text-white transition-colors">
+                <i className="fas fa-chevron-left text-lg"></i>
+              </button>
+              
+              <div className="flex space-x-2 overflow-x-auto">
+                {dateOptions.map((dateOption) => (
+                  <button
+                    key={dateOption.value}
+                    onClick={() => handleDateSelect(dateOption.value)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 ${
+                      dateOption.isSelected
+                        ? 'bg-red-600 text-white shadow-lg transform scale-105'
+                        : dateOption.isToday
+                        ? 'bg-gray-600 text-white hover:bg-gray-500'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+                    }`}
+                  >
+                    {dateOption.label}
+                  </button>
+                ))}
+              </div>
+              
+              <button className="p-2 text-gray-400 hover:text-white transition-colors">
+                <i className="fas fa-chevron-right text-lg"></i>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-brand-dark rounded-lg p-4 mb-6">
+            <div className="text-center text-gray-400">
+              <i className="fas fa-calendar-times text-2xl mb-2"></i>
+              <p>No show dates available</p>
+            </div>
+          </div>
+        )}
+
+        {/* Selected Date Info */}
+        {selectedDate && (
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-xl font-semibold text-white">
+              Showtimes for {formatDateForDisplay(selectedDate)}
+            </h3>
+            <div className="flex items-center space-x-4 text-sm text-gray-300">
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                <span>Available</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+                <span>Fast Filling</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-gray-500 rounded-full mr-2"></div>
+                <span>Past Showtime</span>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="space-y-4">
-          {screens.length === 0 ? (
-            <div className="text-gray-400">No showtimes available.</div>
+          {!selectedDate ? (
+            <div className="text-gray-400">Please select a date to view showtimes.</div>
+          ) : getFilteredScreens().length === 0 ? (
+            <div className="text-gray-400">No showtimes available for {formatDateForDisplay(selectedDate)}.</div>
           ) : (
-            screens.map((screen) => (
+            getFilteredScreens().map((screen) => (
               <div key={screen.screenId} className="bg-brand-dark p-4 rounded-md mb-4">
                 <div className="text-white font-semibold mb-2">Screen {screen.screenNumber || screen.screenId} {screen.screenType && <span className="text-xs text-gray-400 ml-2">({screen.screenType})</span>}</div>
                 {screen.showGroups.map((group: any, idx: number) => (
                   <div key={idx} className="mb-2">
-                    <div className="text-xs text-gray-300 mb-1">{group.theatre} • {group.bookingDate}</div>
+                    <div className="text-xs text-gray-300 mb-1">{group.theatre}</div>
                     <div className="flex flex-wrap gap-2">
                       {group.showtimes.map((t: string) => {
                         const showtimeStatus = getShowtimeStatus(group.bookingDate, t);
@@ -214,11 +323,21 @@ const MovieDetailPage: React.FC = () => {
                           <button
                             key={`${screen.screenId}-${group.bookingDate}-${t}`}
                             onClick={() => !showtimeStatus.disabled && handleShowtimeSelect(screen.screenId, group.bookingDate, t)}
-                            className={showtimeStatus.className}
+                            className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                              showtimeStatus.disabled
+                                ? 'bg-gray-500 text-gray-300 cursor-not-allowed opacity-50'
+                                : 'bg-green-600 text-white hover:bg-green-700 hover:scale-105 shadow-md'
+                            }`}
                             disabled={showtimeStatus.disabled}
                             title={showtimeStatus.tooltip}
                           >
-                            {t}
+                            <span className="flex items-center">
+                              {!showtimeStatus.disabled && (
+                                <div className="w-2 h-2 bg-white rounded-full mr-2"></div>
+                              )}
+                              <i className="fas fa-clock mr-1 text-xs"></i>
+                              {t}
+                            </span>
                           </button>
                         );
                       })}

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MovieCard from '../components/MovieCard';
+import { filterValidScreens } from '../utils/showtimeValidation';
 import { useAppContext } from '../context/AppContext';
 import { apiService } from '../services/api';
 
@@ -22,69 +23,47 @@ const HomePage: React.FC = () => {
   }, [movies.length]);
 
   useEffect(() => {
-    const fetchAllMoviesWithShowtimes = async () => {
+    const fetchMoviesWithAssignedShows = async () => {
       try {
         setIsLoading(true);
-        
-        // First, fetch all active movies
-        const moviesRes = await apiService.getNowShowing();
-        if (!moviesRes.success || !Array.isArray(moviesRes.data)) {
+
+        const res = await apiService.getActiveMoviesWithShows();
+        if (!res.success || !Array.isArray(res.data)) {
           setMovies([]);
           setAllMovies([]);
           return;
         }
 
-        // For each movie, fetch its showtimes
-        const moviesWithShowtimes = await Promise.all(
-          moviesRes.data.map(async (movie: any) => {
-            try {
-              const showtimesRes = await apiService.getMovieShowtimes(movie._id);
-              const screens = showtimesRes.success && Array.isArray(showtimesRes.data) ? showtimesRes.data : [];
-              
-              return {
-                _id: movie._id,
-                title: movie.title,
-                posterUrl: movie.posterUrl,
-                genre: Array.isArray(movie.genre) ? movie.genre.join('/') : (movie.genre || ''),
-                rating: movie.rating || 0,
-                duration: movie.duration,
-                language: movie.movieLanguage || 'English',
-                status: movie.status,
-                screens: screens,
-                showtimes: screens.flatMap((s: any) => (s.showGroups || []).flatMap((g: any) => g.showtimes || [])).slice(0, 3),
-                _hasAssignedShows: screens.length > 0
-              };
-            } catch (error) {
-              console.error(`Error fetching showtimes for movie ${movie._id}:`, error);
-              return {
-                _id: movie._id,
-                title: movie.title,
-                posterUrl: movie.posterUrl,
-                genre: Array.isArray(movie.genre) ? movie.genre.join('/') : (movie.genre || ''),
-                rating: movie.rating || 0,
-                duration: movie.duration,
-                language: movie.movieLanguage || 'English',
-                status: movie.status,
-                screens: [],
-                showtimes: [],
-                _hasAssignedShows: false
-              };
-            }
-          })
-        );
+        // Each item: { movie, screens }
+        const normalized = res.data.map((item: any) => {
+          const filteredScreens = filterValidScreens(item.screens || []);
+          return {
+            _id: item.movie?._id,
+            title: item.movie?.title,
+            posterUrl: item.movie?.posterUrl,
+            genre: Array.isArray(item.movie?.genre) ? item.movie.genre.join('/') : (item.movie?.genre || ''),
+            rating: item.movie?.rating || 0,
+            duration: item.movie?.duration,
+            language: item.movie?.language || item.movie?.movieLanguage || 'English',
+            status: item.movie?.status,
+            screens: filteredScreens,
+            showtimes: filteredScreens.flatMap((s: any) => (s.showGroups || []).flatMap((g: any) => g.showtimes || [])).slice(0, 3),
+            _hasAssignedShows: filteredScreens.length > 0
+          };
+        }).filter((m: any) => m._hasAssignedShows);
 
-        setMovies(moviesWithShowtimes);
-        setAllMovies(moviesWithShowtimes);
+        setMovies(normalized);
+        setAllMovies(normalized);
       } catch (error) {
-        console.error('Error fetching movies:', error);
+        console.error('Error fetching movies with shows:', error);
         setMovies([]);
         setAllMovies([]);
       } finally {
         setIsLoading(false);
       }
     };
-    
-    fetchAllMoviesWithShowtimes();
+
+    fetchMoviesWithAssignedShows();
   }, [city]);
 
   useEffect(() => {
