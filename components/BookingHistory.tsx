@@ -56,24 +56,87 @@ const BookingHistory: React.FC = () => {
   const [popupMessage, setPopupMessage] = useState('');
   const [userRating, setUserRating] = useState<number>(0);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [ratingMessage, setRatingMessage] = useState<string>('');
+  const [movieRatingData, setMovieRatingData] = useState<
+    | null
+    | {
+        averageRating?: number;
+        totalRatings?: number;
+        userRating?: { rating: number; review?: string; createdAt?: string } | null;
+      }
+  >(null);
 
   useEffect(() => {
     fetchBookings();
   }, []); // Only fetch once on component mount
 
+  // Fetch user's rating for the selected booking's movie when a booking is opened
+  useEffect(() => {
+    const loadUserRating = async () => {
+      if (!selectedBooking) {
+        setMovieRatingData(null);
+        return;
+      }
+      try {
+        const movieId = (selectedBooking as any)?.movie?.movieId || (selectedBooking as any)?.movie?._id;
+        if (!movieId) return;
+        const resp = await apiService.getMovieRating(movieId);
+        if (resp?.success) {
+          setMovieRatingData(resp.data as any);
+          if ((resp.data as any)?.userRating?.rating) {
+            setUserRating((resp.data as any).userRating.rating);
+            setRatingMessage('You have already rated this movie.');
+            return;
+          } else {
+            setRatingMessage('');
+          }
+        }
+
+        // Fallback: fetch user's ratings list and match by movieId
+        const userRatingsResp = await apiService.getUserRatings(1, 100);
+        const ratingsList = (userRatingsResp as any)?.data?.ratings || [];
+        const found = ratingsList.find((r: any) => {
+          const id = r?.movieId?._id || r?.movieId;
+          return id?.toString?.() === movieId?.toString?.();
+        });
+        if (found?.rating) {
+          setMovieRatingData(prev => ({ ...(prev || {}), userRating: { rating: found.rating, review: found.review, createdAt: found.createdAt } }));
+          setUserRating(found.rating);
+          setRatingMessage('You have already rated this movie.');
+        }
+      } catch {
+        // ignore rating fetch errors in modal
+      }
+    };
+    loadUserRating();
+  }, [selectedBooking]);
+
   const fetchBookings = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // Always fetch all bookings, then filter on frontend
-      const response = await apiService.getUserBookings();
-      
-      if (response.success) {
-        setBookings(response.data || []);
-      } else {
-        setError(response.error || 'Failed to fetch bookings');
+
+      // Fetch all user bookings across pages so Completed tab isn't truncated by pagination
+      const all: Booking[] = [] as any;
+      let page = 1;
+      const limit = 50; // fetch in reasonable batches
+      // Loop until API reports no next page
+      // Note: apiService returns pagination info in response
+      /* eslint-disable no-constant-condition */
+      while (true) {
+        const resp = await apiService.getUserBookings({ page, limit });
+        if (!resp.success) {
+          setError(resp.error || 'Failed to fetch bookings');
+          break;
+        }
+        const batch = (resp.data as any[]) || [];
+        all.push(...(batch as any));
+        const hasNext = (resp as any).pagination?.hasNext === true;
+        if (!hasNext || batch.length === 0) break;
+        page += 1;
       }
+
+      setBookings(all);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch bookings');
     } finally {
@@ -182,70 +245,85 @@ const BookingHistory: React.FC = () => {
   // Check if movie has been watched (showtime has passed)
   const isMovieWatched = (booking: Booking) => {
     const now = new Date();
-    
-    // Parse the showtime date and time properly
-    let showDateTime;
+
+    // Parse the showtime date and time robustly
+    let showDateTime: Date;
     try {
-      let dateStr = booking.showtime.date; // e.g., "2025-10-20" or Date object
-      const timeStr = booking.showtime.time; // e.g., "7:00 PM"
-      
-      // Ensure dateStr is a string
+      let dateStr: string = booking.showtime.date as any;
+      let timeStr: string = (booking.showtime.time || '').toString();
+
+      // Normalize inputs
       if (dateStr instanceof Date) {
-        dateStr = dateStr.toISOString().split('T')[0]; // Convert to YYYY-MM-DD format
-      } else if (typeof dateStr === 'string' && dateStr.includes('T')) {
-        dateStr = dateStr.split('T')[0]; // Extract just the date part
-      }
-      
-      // Convert time to 24-hour format if needed
-      let time24 = timeStr;
-      if (timeStr.includes('AM') || timeStr.includes('PM')) {
-        const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-        if (timeMatch) {
-          let hours = parseInt(timeMatch[1]);
-          const minutes = timeMatch[2];
-          const period = timeMatch[3].toUpperCase();
-
-          if (period === 'PM' && hours !== 12) {
-            hours += 12;
-          } else if (period === 'AM' && hours === 12) {
-            hours = 0;
-          }
-
-          time24 = `${hours.toString().padStart(2, '0')}:${minutes}`;
+        dateStr = dateStr.toISOString().split('T')[0];
+      } else if (typeof dateStr === 'string') {
+        dateStr = dateStr.trim();
+        if (dateStr.includes('T')) {
+          // If ISO, just use the date part
+          dateStr = dateStr.split('T')[0];
         }
       }
-      
-      // Create the full datetime string
-      const dateTimeStr = `${dateStr}T${time24}:00`;
-      showDateTime = new Date(dateTimeStr);
-      
-      if (isNaN(showDateTime.getTime())) {
-        // Fallback to just the date if time parsing fails
-        showDateTime = new Date(booking.showtime.date);
+
+      timeStr = timeStr.trim().replace(/\s+/g, ' ');
+
+      // Try patterns in order of specificity
+      let normalized24h = '';
+
+      // Case 1: 24h with seconds e.g. 19:05:00
+      let m = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      if (m) {
+        const h = Math.min(23, parseInt(m[1]));
+        const min = Math.min(59, parseInt(m[2]));
+        const sec = m[3] ? Math.min(59, parseInt(m[3])) : 0;
+        normalized24h = `${h.toString().padStart(2, '0')}:${min
+          .toString()
+          .padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+      } else {
+        // Case 2: 12h with AM/PM, with or without minutes, with/without space
+        const ampm = timeStr.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+        if (ampm) {
+          let hours = parseInt(ampm[1]);
+          const minutes = ampm[2] ? parseInt(ampm[2]) : 0;
+          const period = ampm[3].toUpperCase();
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
+          normalized24h = `${hours.toString().padStart(2, '0')}:${minutes
+            .toString()
+            .padStart(2, '0')}:00`;
+        }
       }
+
+      // Fallback if time missing or unparsable: assume end of day 23:59
+      if (!normalized24h) {
+        normalized24h = '23:59:00';
+      }
+
+      const candidate = new Date(`${dateStr}T${normalized24h}`);
+      showDateTime = isNaN(candidate.getTime())
+        ? new Date(booking.showtime.date)
+        : candidate;
     } catch (error) {
       console.error('Error parsing showtime in isMovieWatched:', error);
-      // Fallback to just the date if parsing fails
       showDateTime = new Date(booking.showtime.date);
     }
-    
-    return now > showDateTime; // Movie is watched if current time is after showtime
+
+    return now.getTime() > showDateTime.getTime();
   };
 
   // Filter bookings based on the selected filter
   const filteredBookings = bookings.filter(booking => {
+    const statusNorm = (booking.status as unknown as string)?.toString().toLowerCase();
     if (filter === 'all') return true;
     if (filter === 'confirmed') {
       // Upcoming: confirmed bookings that haven't been watched yet
-      return booking.status === 'confirmed' && !isMovieWatched(booking);
+      return statusNorm === 'confirmed' && !isMovieWatched(booking);
     }
     if (filter === 'completed') {
-      // Completed: confirmed bookings that have been watched (showtime passed)
-      return booking.status === 'confirmed' && isMovieWatched(booking);
+      // Completed: either explicitly marked completed OR confirmed bookings whose showtime has passed
+      return statusNorm === 'completed' || (statusNorm === 'confirmed' && isMovieWatched(booking));
     }
     if (filter === 'cancelled') {
       // Cancelled: any booking with cancelled status
-      return booking.status === 'cancelled';
+      return statusNorm === 'cancelled';
     }
     return false;
   });
@@ -273,13 +351,33 @@ const BookingHistory: React.FC = () => {
         setPopupMessage(`Thank you for rating "${selectedBooking.movie.title}" ${rating}/10!`);
         setShowSuccessPopup(true);
         setUserRating(rating);
+        setMovieRatingData((prev) => ({ ...(prev || {}), userRating: { rating } }));
       } else {
         setPopupMessage(response.error || 'Failed to submit rating. Please try again.');
         setShowErrorPopup(true);
       }
     } catch (error) {
-      setPopupMessage('Failed to submit rating. Please try again.');
-      setShowErrorPopup(true);
+      const err: any = error;
+      const msg = err?.message || '';
+      if (/already rated/i.test(msg)) {
+        // Refresh current rating and show inline message instead
+        try {
+          const movieId = (selectedBooking as any)?.movie?.movieId || (selectedBooking as any)?.movie?._id;
+          if (movieId) {
+            const resp = await apiService.getMovieRating(movieId);
+            if (resp?.success) {
+              setMovieRatingData(resp.data as any);
+              if ((resp.data as any)?.userRating?.rating) {
+                setUserRating((resp.data as any).userRating.rating);
+              }
+            }
+          }
+        } catch {}
+        setRatingMessage('You have already rated this movie.');
+      } else {
+        setPopupMessage('Failed to submit rating. Please try again.');
+        setShowErrorPopup(true);
+      }
     } finally {
       setIsSubmittingRating(false);
     }
@@ -422,9 +520,12 @@ const BookingHistory: React.FC = () => {
               <div className="flex items-start space-x-4">
                 {/* Movie Poster */}
                 <img
-                  src={booking.movie.posterUrl}
+                  src={booking.movie.posterUrl || (booking as any)?.movie?.poster || '/vite.svg'}
                   alt={booking.movie.title}
                   className="w-16 h-24 object-cover rounded-md"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/vite.svg';
+                  }}
                 />
 
                 {/* Booking Details */}
@@ -495,9 +596,12 @@ const BookingHistory: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex items-start space-x-4">
                   <img
-                    src={selectedBooking.movie.posterUrl}
+                    src={selectedBooking.movie.posterUrl || (selectedBooking as any)?.movie?.poster || '/vite.svg'}
                     alt={selectedBooking.movie.title}
                     className="w-24 h-36 object-cover rounded-md"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/vite.svg';
+                    }}
                   />
                   <div className="flex-1">
                     <h3 className="text-xl font-semibold text-white mb-2">
@@ -568,47 +672,80 @@ const BookingHistory: React.FC = () => {
                   </div>
                 )}
 
-                {/* Movie Rating - Show for watched movies */}
+                {/* Movie Rating - Show for watched movies (if already rated, show summary) */}
                 {selectedBooking.status === 'confirmed' && isMovieWatched(selectedBooking) && (
                   <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
                     <h4 className="text-lg font-semibold text-purple-400 mb-2">Rate Your Experience</h4>
-                    <div className="flex flex-col items-center space-y-3">
-                      <p className="text-sm text-gray-300 text-center">
-                        How was your experience watching "{selectedBooking.movie.title}"?
-                      </p>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
-                          <button
-                            key={rating}
-                            onClick={() => handleRatingSubmit(rating)}
-                            disabled={isSubmittingRating}
-                            className={`w-10 h-10 rounded-full border-2 transition-colors flex items-center justify-center text-sm font-medium ${
-                              userRating >= rating
-                                ? 'bg-yellow-400 border-yellow-400 text-black hover:bg-yellow-300'
-                                : 'bg-transparent border-gray-400 text-gray-400 hover:border-yellow-400 hover:text-yellow-400'
-                            } ${isSubmittingRating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                          >
-                            {rating}
-                          </button>
-                        ))}
+                    {movieRatingData?.userRating?.rating ? (
+                      <div className="flex flex-wrap items-center gap-3 text-gray-100">
+                        <span className="text-2xl font-bold">{movieRatingData.userRating.rating}/10</span>
+                        <span className="text-gray-300">for "{selectedBooking.movie.title}"</span>
+                        <span className="text-sm text-gray-400">You have already rated this movie.</span>
                       </div>
-                      {userRating > 0 && (
-                        <p className="text-sm text-green-400">
-                          Thank you for rating this movie {userRating}/10!
+                    ) : (
+                      <div className="flex flex-col items-center space-y-3">
+                        <p className="text-sm text-gray-300 text-center">
+                          How was your experience watching "{selectedBooking.movie.title}"?
                         </p>
-                      )}
-                    </div>
+                        <div className="flex flex-wrap justify-center gap-2">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+                            <button
+                              key={rating}
+                              onClick={() => handleRatingSubmit(rating)}
+                              disabled={isSubmittingRating}
+                              className={`w-10 h-10 rounded-full border-2 transition-colors flex items-center justify-center text-sm font-medium ${
+                                userRating >= rating
+                                  ? 'bg-yellow-400 border-yellow-400 text-black hover:bg-yellow-300'
+                                  : 'bg-transparent border-gray-400 text-gray-400 hover:border-yellow-400 hover:text-yellow-400'
+                              } ${isSubmittingRating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              {rating}
+                            </button>
+                          ))}
+                        </div>
+                        {userRating > 0 && (
+                          <p className="text-sm text-green-400">
+                            Thank you for rating this movie {userRating}/10!
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Completed Booking Info */}
+                {/* Completed Booking Info -> Show user's rating instead */}
                 {selectedBooking.status === 'completed' && (
                   <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
-                    <h4 className="text-lg font-semibold text-blue-400 mb-2">Show Completed</h4>
-                    <div className="space-y-2 text-gray-300">
-                      <p><strong>Status:</strong> Show has been completed</p>
-                      <p><strong>Thank you for choosing BookNView!</strong></p>
-                    </div>
+                    <h4 className="text-lg font-semibold text-blue-400 mb-2">Your Rating</h4>
+                    {movieRatingData?.userRating?.rating ? (
+                      <div className="flex items-center space-x-3 text-gray-100">
+                        <span className="text-2xl font-bold">{movieRatingData.userRating.rating}/10</span>
+                        <span className="text-gray-300">for "{selectedBooking.movie.title}"</span>
+                        {ratingMessage && (
+                          <span className="text-sm text-gray-400">{ratingMessage}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-gray-300">{ratingMessage || "You haven't rated this movie yet. Rate your experience:"}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[1,2,3,4,5,6,7,8,9,10].map((r) => (
+                            <button
+                              key={r}
+                              onClick={() => handleRatingSubmit(r)}
+                              disabled={isSubmittingRating}
+                              className={`w-10 h-10 rounded-full border-2 transition-colors flex items-center justify-center text-sm font-medium ${
+                                userRating >= r
+                                  ? 'bg-yellow-400 border-yellow-400 text-black hover:bg-yellow-300'
+                                  : 'bg-transparent border-gray-400 text-gray-400 hover:border-yellow-400 hover:text-yellow-400'
+                              } ${isSubmittingRating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
