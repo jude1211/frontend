@@ -82,6 +82,7 @@ const BookingConfirmationPage: React.FC = () => {
           console.log('Booking status:', response.data.status);
           console.log('Showtime date:', response.data.showtime?.date);
           console.log('Showtime time:', response.data.showtime?.time);
+          console.log('Full showtime object:', response.data.showtime);
           setBooking(response.data);
         } else {
           setError('Booking not found');
@@ -159,17 +160,99 @@ const BookingConfirmationPage: React.FC = () => {
     }
     
     const now = new Date();
-    const showDate = new Date(bookingData.showtime.date);
-    const hoursUntilShow = (showDate.getTime() - now.getTime()) / (1000 * 60 * 60);
     
-    console.log('Time calculation:', {
-      now: now.toISOString(),
-      showDate: showDate.toISOString(),
-      hoursUntilShow: hoursUntilShow,
-      canCancel: hoursUntilShow > 2
-    });
-    
-    return hoursUntilShow > 2; // Can cancel up to 2 hours before show
+    // Parse the showtime date and time properly
+    let showDateTime: Date;
+    try {
+      // Combine date and time to create a proper datetime
+      let dateStr = bookingData.showtime.date; // e.g., "2025-10-20" or Date object
+      const timeStr = bookingData.showtime.time; // e.g., "7:00 PM"
+      
+      // Ensure dateStr is a string
+      if (dateStr instanceof Date) {
+        dateStr = dateStr.toISOString().split('T')[0]; // Convert to YYYY-MM-DD format
+      } else if (typeof dateStr === 'string' && dateStr.includes('T')) {
+        dateStr = dateStr.split('T')[0]; // Extract just the date part
+      }
+      
+      console.log('Parsing showtime:', { 
+        originalDate: bookingData.showtime.date, 
+        dateStr, 
+        timeStr, 
+        dateType: typeof dateStr,
+        timeType: typeof timeStr 
+      });
+      
+      // Convert time to 24-hour format if needed
+      let time24 = timeStr;
+      if (timeStr.includes('AM') || timeStr.includes('PM')) {
+        try {
+          // Parse the time string properly
+          const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+          if (timeMatch) {
+            let hours = parseInt(timeMatch[1]);
+            const minutes = timeMatch[2];
+            const period = timeMatch[3].toUpperCase();
+            
+            if (period === 'PM' && hours !== 12) {
+              hours += 12;
+            } else if (period === 'AM' && hours === 12) {
+              hours = 0;
+            }
+            
+            time24 = `${hours.toString().padStart(2, '0')}:${minutes}`;
+            console.log('Time conversion successful:', { original: timeStr, converted: time24 });
+          } else {
+            console.error('Could not parse time string:', timeStr);
+            return false;
+          }
+        } catch (error) {
+          console.error('Error converting time to 24-hour format:', error);
+          return false;
+        }
+      }
+      
+      // Create the full datetime string
+      const dateTimeStr = `${dateStr}T${time24}:00`;
+      console.log('Creating datetime string:', { dateStr, time24, dateTimeStr });
+      showDateTime = new Date(dateTimeStr);
+      
+      console.log('Parsed datetime:', { 
+        dateTimeStr, 
+        showDateTime: isNaN(showDateTime.getTime()) ? 'Invalid Date' : showDateTime.toISOString() 
+      });
+      
+      if (isNaN(showDateTime.getTime())) {
+        console.error('Invalid showtime date:', dateTimeStr);
+        // Try alternative parsing
+        try {
+          const altDateTime = new Date(`${dateStr} ${timeStr}`);
+          if (!isNaN(altDateTime.getTime())) {
+            showDateTime = altDateTime;
+            console.log('Using alternative parsing:', altDateTime.toISOString());
+          } else {
+            return false;
+          }
+        } catch (altError) {
+          console.error('Alternative parsing also failed:', altError);
+          return false;
+        }
+      }
+      
+      const hoursUntilShow = (showDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+      
+      console.log('Time calculation:', {
+        now: now.toISOString(),
+        showDateTime: showDateTime.toISOString(),
+        hoursUntilShow: hoursUntilShow,
+        canCancel: hoursUntilShow > 2
+      });
+      
+      return hoursUntilShow > 2; // Can cancel up to 2 hours before show
+    } catch (error) {
+      console.error('Error parsing showtime:', error);
+      return false;
+    }
   };
 
   // Calculate cancellation policy
@@ -177,61 +260,165 @@ const BookingConfirmationPage: React.FC = () => {
     if (!bookingData) return null;
     
     const now = new Date();
-    const showDate = new Date(bookingData.showtime.date);
-    const hoursUntilShow = (showDate.getTime() - now.getTime()) / (1000 * 60 * 60);
     
-    let policy = {
-      canCancel: hoursUntilShow > 2,
-      hoursUntilShow: Math.round(hoursUntilShow * 10) / 10,
-      cancellationFee: 0,
-      refundAmount: bookingData.pricing.totalAmount,
-      message: ''
-    };
-    
-    if (hoursUntilShow > 24) {
-      // More than 24 hours: No cancellation fee
-      policy.cancellationFee = 0;
-      policy.refundAmount = bookingData.pricing.totalAmount;
-      policy.message = 'Full refund available';
-    } else if (hoursUntilShow > 2) {
-      // 2-24 hours: 10% cancellation fee
-      policy.cancellationFee = Math.round(bookingData.pricing.totalAmount * 0.1);
-      policy.refundAmount = bookingData.pricing.totalAmount - policy.cancellationFee;
-      policy.message = '10% cancellation fee applies';
-    } else {
-      // Less than 2 hours: Cannot cancel
-      policy.canCancel = false;
-      policy.message = 'Cannot cancel within 2 hours of showtime';
+    // Parse the showtime date and time properly (same logic as isBookingCancellable)
+    let showDateTime: Date;
+    try {
+      let dateStr = bookingData.showtime.date;
+      const timeStr = bookingData.showtime.time;
+      
+      // Ensure dateStr is a string
+      if (dateStr instanceof Date) {
+        dateStr = dateStr.toISOString().split('T')[0]; // Convert to YYYY-MM-DD format
+      } else if (typeof dateStr === 'string' && dateStr.includes('T')) {
+        dateStr = dateStr.split('T')[0]; // Extract just the date part
+      }
+      
+      // Convert time to 24-hour format if needed
+      let time24 = timeStr;
+      if (timeStr.includes('AM') || timeStr.includes('PM')) {
+        try {
+          // Parse the time string properly
+          const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+          if (timeMatch) {
+            let hours = parseInt(timeMatch[1]);
+            const minutes = timeMatch[2];
+            const period = timeMatch[3].toUpperCase();
+            
+            if (period === 'PM' && hours !== 12) {
+              hours += 12;
+            } else if (period === 'AM' && hours === 12) {
+              hours = 0;
+            }
+            
+            time24 = `${hours.toString().padStart(2, '0')}:${minutes}`;
+          } else {
+            console.error('Could not parse time string:', timeStr);
+            return {
+              canCancel: false,
+              hoursUntilShow: 0,
+              cancellationFee: 0,
+              refundAmount: 0,
+              message: 'Invalid time format'
+            };
+          }
+        } catch (error) {
+          console.error('Error converting time to 24-hour format:', error);
+          return {
+            canCancel: false,
+            hoursUntilShow: 0,
+            cancellationFee: 0,
+            refundAmount: 0,
+            message: 'Time conversion error'
+          };
+        }
+      }
+      
+      const dateTimeStr = `${dateStr}T${time24}:00`;
+      showDateTime = new Date(dateTimeStr);
+      
+      if (isNaN(showDateTime.getTime())) {
+        console.error('Invalid showtime date for policy calculation:', dateTimeStr);
+        // Try alternative parsing
+        try {
+          const altDateTime = new Date(`${dateStr} ${timeStr}`);
+          if (!isNaN(altDateTime.getTime())) {
+            showDateTime = altDateTime;
+            console.log('Using alternative parsing for policy:', altDateTime.toISOString());
+          } else {
+            return {
+              canCancel: false,
+              hoursUntilShow: 0,
+              cancellationFee: 0,
+              refundAmount: 0,
+              message: 'Invalid showtime'
+            };
+          }
+        } catch (altError) {
+          console.error('Alternative parsing also failed for policy:', altError);
+          return {
+            canCancel: false,
+            hoursUntilShow: 0,
+            cancellationFee: 0,
+            refundAmount: 0,
+            message: 'Invalid showtime'
+          };
+        }
+      }
+      const hoursUntilShow = (showDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+      
+      let policy = {
+        canCancel: hoursUntilShow > 2,
+        hoursUntilShow: Math.round(hoursUntilShow * 10) / 10,
+        cancellationFee: 0,
+        refundAmount: bookingData.pricing.totalAmount,
+        message: ''
+      };
+      
+      if (hoursUntilShow > 24) {
+        // More than 24 hours: No cancellation fee
+        policy.cancellationFee = 0;
+        policy.refundAmount = bookingData.pricing.totalAmount;
+        policy.message = 'Full refund available';
+      } else if (hoursUntilShow > 2) {
+        // 2-24 hours: 10% cancellation fee
+        policy.cancellationFee = Math.round(bookingData.pricing.totalAmount * 0.1);
+        policy.refundAmount = bookingData.pricing.totalAmount - policy.cancellationFee;
+        policy.message = '10% cancellation fee applies';
+      } else {
+        // Less than 2 hours: Cannot cancel
+        policy.canCancel = false;
+        policy.message = 'Cannot cancel within 2 hours of showtime';
+      }
+      
+      return policy;
+    } catch (error) {
+      console.error('Error parsing showtime for policy:', error);
+      return {
+        canCancel: false,
+        hoursUntilShow: 0,
+        cancellationFee: 0,
+        refundAmount: 0,
+        message: 'Error parsing showtime'
+      };
     }
-    
-    return policy;
   };
 
   // Handle booking cancellation
   const handleCancelBooking = async () => {
+    console.log('=== CANCEL BOOKING ATTEMPT ===');
+    console.log('Booking:', booking);
+    console.log('Is cancellable:', isBookingCancellable(booking));
+    console.log('Cancel reason:', cancelReason);
+    
     if (!booking || !isBookingCancellable(booking)) {
       console.log('Booking not cancellable:', { booking, cancellable: isBookingCancellable(booking) });
+      alert('This booking cannot be cancelled. Please check the cancellation policy.');
       return;
     }
     
-    console.log('Cancelling booking:', booking.bookingId);
+    console.log('Proceeding with cancellation for booking:', booking.bookingId);
     setIsCancelling(true);
+    
     try {
+      console.log('Calling API to cancel booking...');
       const response = await apiService.cancelBooking(booking.bookingId, cancelReason);
       console.log('Cancel booking response:', response);
       
       if (response.success) {
+        console.log('Booking cancelled successfully');
         // Update booking status
         setBooking(prev => prev ? { ...prev, status: 'cancelled' } : null);
         setShowCancelModal(false);
         setCancelReason('');
         alert('Booking cancelled successfully! Refund will be processed within 3-5 business days.');
       } else {
+        console.error('Cancel booking failed:', response.error);
         alert(response.error || 'Failed to cancel booking');
       }
     } catch (error) {
       console.error('Error cancelling booking:', error);
-      alert('Failed to cancel booking. Please try again.');
+      alert(`Failed to cancel booking: ${error.message || 'Please try again.'}`);
     } finally {
       setIsCancelling(false);
     }
@@ -504,9 +691,15 @@ const BookingConfirmationPage: React.FC = () => {
                 <button
                   onClick={handleCancelBooking}
                   disabled={isCancelling || !isBookingCancellable(booking)}
-                  className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  className={`flex-1 py-2 px-4 rounded-lg transition-colors ${
+                    isCancelling || !isBookingCancellable(booking)
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : 'bg-red-600 text-white hover:bg-red-700'
+                  }`}
                 >
-                  {isCancelling ? 'Cancelling...' : 'Cancel Booking'}
+                  {isCancelling ? 'Cancelling...' : 
+                   !isBookingCancellable(booking) ? 'Cannot Cancel' : 
+                   'Cancel Booking'}
                 </button>
               </div>
             </div>

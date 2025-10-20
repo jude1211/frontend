@@ -374,10 +374,18 @@ class ApiService {
   }
 
   async cancelBooking(bookingId: string, reason?: string): Promise<ApiResponse<any>> {
-    return this.makeRequest<any>(`/bookings/${bookingId}/cancel`, {
-      method: 'PATCH',
-      body: JSON.stringify({ reason })
-    });
+    console.log('API Service: Cancelling booking', { bookingId, reason });
+    try {
+      const result = await this.makeRequest<any>(`/bookings/${bookingId}/cancel`, {
+        method: 'PATCH',
+        body: JSON.stringify({ reason })
+      });
+      console.log('API Service: Cancel booking result', result);
+      return result;
+    } catch (error) {
+      console.error('API Service: Cancel booking error', error);
+      throw error;
+    }
   }
 
   // Admin Movies
