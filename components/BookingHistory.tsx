@@ -51,6 +51,9 @@ const BookingHistory: React.FC = () => {
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [showErrorPopup, setShowErrorPopup] = useState(false);
+  const [popupMessage, setPopupMessage] = useState('');
 
   useEffect(() => {
     fetchBookings();
@@ -94,12 +97,15 @@ const BookingHistory: React.FC = () => {
         setSelectedBooking(null);
         setShowCancelModal(false);
         setCancelReason('');
-        alert('Booking cancelled successfully!');
+        setPopupMessage('Booking cancelled successfully!');
+        setShowSuccessPopup(true);
       } else {
-        alert(response.error || 'Failed to cancel booking');
+        setPopupMessage(response.error || 'Failed to cancel booking');
+        setShowErrorPopup(true);
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to cancel booking');
+      setPopupMessage(err.message || 'Failed to cancel booking');
+      setShowErrorPopup(true);
     } finally {
       setCancelling(null);
     }
@@ -147,12 +153,85 @@ const BookingHistory: React.FC = () => {
     return seats.map(seat => `${seat.row}${seat.seatNumber}`).join(', ');
   };
 
+  // Generate QR code URL (same as BookingConfirmationPage)
+  const getQRCodeUrl = (booking: Booking) => {
+    const qrData = {
+      bookingId: booking.bookingId,
+      movie: booking.movie.title,
+      theatre: booking.theatre.name,
+      screen: booking.theatre.theatreId, // Using theatreId as screen info
+      showtime: booking.showtime.date + ' ' + booking.showtime.time,
+      seats: booking.seats.map(seat => `${seat.row}${seat.seatNumber}`).join(', '),
+      totalAmount: booking.pricing.totalAmount,
+      status: booking.status
+    };
+    
+    const qrText = `Booking ID: ${qrData.bookingId}\nMovie: ${qrData.movie}\nTheatre: ${qrData.theatre}\nScreen: ${qrData.screen}\nShowtime: ${qrData.showtime}\nSeats: ${qrData.seats}\nTotal: ₹${qrData.totalAmount}\nStatus: ${qrData.status}`;
+    
+    // Use QR Server API to generate QR code
+    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrText)}`;
+  };
+
   const isCancellable = (booking: Booking) => {
     if (booking.status !== 'confirmed') return false;
     
     const now = new Date();
-    const showDate = new Date(booking.showtime.date);
-    const hoursUntilShow = (showDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    
+    // Parse the showtime date and time properly
+    let showDateTime;
+    try {
+      let dateStr = booking.showtime.date; // e.g., "2025-10-20" or Date object
+      const timeStr = booking.showtime.time; // e.g., "7:00 PM"
+      
+      // Ensure dateStr is a string
+      if (dateStr instanceof Date) {
+        dateStr = dateStr.toISOString().split('T')[0]; // Convert to YYYY-MM-DD format
+      } else if (typeof dateStr === 'string' && dateStr.includes('T')) {
+        dateStr = dateStr.split('T')[0]; // Extract just the date part
+      }
+      
+      // Convert time to 24-hour format if needed
+      let time24 = timeStr;
+      if (timeStr.includes('AM') || timeStr.includes('PM')) {
+        const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (timeMatch) {
+          let hours = parseInt(timeMatch[1]);
+          const minutes = timeMatch[2];
+          const period = timeMatch[3].toUpperCase();
+
+          if (period === 'PM' && hours !== 12) {
+            hours += 12;
+          } else if (period === 'AM' && hours === 12) {
+            hours = 0;
+          }
+
+          time24 = `${hours.toString().padStart(2, '0')}:${minutes}`;
+        }
+      }
+      
+      // Create the full datetime string
+      const dateTimeStr = `${dateStr}T${time24}:00`;
+      showDateTime = new Date(dateTimeStr);
+      
+      if (isNaN(showDateTime.getTime())) {
+        // Fallback to just the date if time parsing fails
+        showDateTime = new Date(booking.showtime.date);
+      }
+    } catch (error) {
+      console.error('Error parsing showtime in isCancellable:', error);
+      // Fallback to just the date if parsing fails
+      showDateTime = new Date(booking.showtime.date);
+    }
+    
+    const hoursUntilShow = (showDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+    
+    console.log('Frontend isCancellable calculation:', {
+      bookingId: booking.bookingId,
+      now: now.toISOString(),
+      showDateTime: isNaN(showDateTime.getTime()) ? 'Invalid Date' : showDateTime.toISOString(),
+      hoursUntilShow: hoursUntilShow,
+      canCancel: hoursUntilShow > 2
+    });
     
     return hoursUntilShow > 2; // Can cancel up to 2 hours before show
   };
@@ -335,17 +414,54 @@ const BookingHistory: React.FC = () => {
                   </div>
                 )}
 
-                {/* Cancellation Info */}
-                {selectedBooking.cancellation && (
+                {/* Cancellation Info - Only show if booking is actually cancelled */}
+                {selectedBooking.status === 'cancelled' && selectedBooking.cancellation && (
                   <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
                     <h4 className="text-lg font-semibold text-red-400 mb-2">Cancellation Details</h4>
                     <div className="space-y-2 text-gray-300">
                       <p><strong>Cancelled At:</strong> {formatDate(selectedBooking.cancellation.cancelledAt)}</p>
-                      <p><strong>Reason:</strong> {selectedBooking.cancellation.reason}</p>
-                      <p><strong>Cancelled By:</strong> {selectedBooking.cancellation.cancelledBy}</p>
+                      <p><strong>Reason:</strong> {selectedBooking.cancellation.reason || 'Not specified'}</p>
+                      <p><strong>Cancelled By:</strong> {selectedBooking.cancellation.cancelledBy || 'User'}</p>
                       {selectedBooking.cancellation.refundEligible && (
                         <p><strong>Refund Amount:</strong> ₹{(selectedBooking.pricing.totalAmount - selectedBooking.cancellation.cancellationFee).toFixed(2)}</p>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {/* QR Code - Show for confirmed bookings */}
+                {selectedBooking.status === 'confirmed' && (
+                  <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
+                    <h4 className="text-lg font-semibold text-green-400 mb-2">Ticket QR Code</h4>
+                    <div className="flex flex-col items-center space-y-3">
+                      <div className="bg-white p-4 rounded-lg">
+                        <img
+                          src={getQRCodeUrl(selectedBooking)}
+                          alt="Booking QR Code"
+                          className="w-32 h-32 rounded"
+                          onError={(e) => {
+                            console.error('QR Code failed to load');
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                      <p className="text-sm text-gray-300 text-center">
+                        Show this QR code at the theatre entrance
+                      </p>
+                      <p className="text-xs text-gray-400 text-center">
+                        Booking ID: {selectedBooking.bookingId}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed Booking Info */}
+                {selectedBooking.status === 'completed' && (
+                  <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
+                    <h4 className="text-lg font-semibold text-blue-400 mb-2">Show Completed</h4>
+                    <div className="space-y-2 text-gray-300">
+                      <p><strong>Status:</strong> Show has been completed</p>
+                      <p><strong>Thank you for choosing BookNView!</strong></p>
                     </div>
                   </div>
                 )}
@@ -430,9 +546,51 @@ const BookingHistory: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
-    </div>
-  );
-};
+        )}
+
+        {/* Success Popup */}
+        {showSuccessPopup && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                  <i className="fas fa-check text-green-600 text-xl"></i>
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">Success!</h3>
+              <p className="text-gray-600 text-center mb-6">{popupMessage}</p>
+              <button
+                onClick={() => setShowSuccessPopup(false)}
+                className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Error Popup */}
+        {showErrorPopup && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <i className="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">Error</h3>
+              <p className="text-gray-600 text-center mb-6">{popupMessage}</p>
+              <button
+                onClick={() => setShowErrorPopup(false)}
+                className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
 export default BookingHistory;
