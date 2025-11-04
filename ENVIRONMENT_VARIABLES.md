@@ -26,7 +26,6 @@ These variables are referenced in the code but not currently set in the `.env.lo
 | `VITE_CLOUDINARY_CLOUD_NAME` | `dslj1txvj` | Cloudinary cloud name (fallback) | `pages/TheatreOwnerSignupPage.tsx` (line 7) |
 | `VITE_CLOUDINARY_UNSIGNED_PRESET` | `booknview` | Cloudinary unsigned upload preset (fallback) | `pages/TheatreOwnerSignupPage.tsx` (line 8) |
 | `import.meta.env.PROD` | *(auto-set by Vite)* | Production mode flag | `components/FirebaseConfigChecker.tsx` (line 43) |
-| `GEMINI_API_KEY` | `PLACEHOLDER_API_KEY` | Gemini API key (via vite.config.ts) | `vite.config.ts` (lines 8-9) - exposed as `process.env.API_KEY` and `process.env.GEMINI_API_KEY` |
 
 ## Environment Variable Usage Details
 
@@ -161,14 +160,26 @@ VITE_SOCKET_URL=http://localhost:5000
 
 ### Variables Used in Code (Not in .env.local):
 9. `VITE_API_BASE_URL` - Fallback: `http://localhost:5000/api/v1`
+   - Used in: `services/api.ts`, `components/MovieSearchInput.tsx`, `pages/MovieDetailPage.tsx`
+
 10. `VITE_TMDB_API_KEY` - Fallback: `your-tmdb-api-key-here`
+    - Used in: `components/MovieSearchInput.tsx`, `pages/MovieDetailPage.tsx`
+
 11. `VITE_CLOUDINARY_CLOUD_NAME` - Fallback: `dslj1txvj`
+    - Used in: `pages/TheatreOwnerSignupPage.tsx`
+
 12. `VITE_CLOUDINARY_UNSIGNED_PRESET` - Fallback: `booknview`
+    - Used in: `pages/TheatreOwnerSignupPage.tsx`
+
 13. `import.meta.env.PROD` - Auto-set by Vite
+    - Used in: `components/FirebaseConfigChecker.tsx`
 
 ### Variables Exposed via vite.config.ts:
 14. `process.env.API_KEY` - From `GEMINI_API_KEY`
+    - Exposed in: `vite.config.ts` (line 8)
+
 15. `process.env.GEMINI_API_KEY` - From `GEMINI_API_KEY`
+    - Exposed in: `vite.config.ts` (line 9)
 
 ## Environment Variable Summary
 
