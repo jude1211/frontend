@@ -17,6 +17,7 @@ const Header: React.FC = () => {
   const [detectionSuccess, setDetectionSuccess] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [theatreOwnerData, setTheatreOwnerData] = useState<any>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Check if we're on any theatre owner page
   const isTheatreOwnerPage = location.pathname.startsWith('/theatre-owner');
@@ -88,8 +89,8 @@ const Header: React.FC = () => {
       <header className="bg-brand-gray shadow-lg sticky top-0 z-50">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-8">
-              <Link to="/" className="text-2xl font-bold text-brand-red">
+            <div className="flex items-center space-x-4 md:space-x-8 flex-1">
+              <Link to="/" className="text-xl md:text-2xl font-bold text-brand-red whitespace-nowrap">
                 BookNView
               </Link>
               {!isTheatreOwnerPage && (
@@ -100,28 +101,29 @@ const Header: React.FC = () => {
                 </nav>
               )}
               {!isTheatreOwnerPage && (
-                <div className="hidden md:flex relative">
+                <div className="hidden lg:flex relative flex-1 max-w-md ml-4">
                   <i className="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                   <input
                     type="text"
                     placeholder="Search for Movies, Events, Plays..."
-                    className="bg-white text-black rounded-md py-2 pl-10 pr-4 w-96 focus:outline-none"
+                    className="bg-white text-black rounded-md py-2 pl-10 pr-4 w-full focus:outline-none"
                   />
                 </div>
               )}
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 md:space-x-4">
               {!isTheatreOwnerPage && (
                 <button 
                   onClick={() => {
                     setIsCityModalOpen(true);
                     resetDetectionState();
                   }} 
-                  className="flex items-center space-x-2 hover:bg-brand-dark px-3 py-2 rounded-md transition-colors"
+                  className="hidden sm:flex items-center space-x-2 hover:bg-brand-dark px-2 md:px-3 py-2 rounded-md transition-colors"
                 >
                   <i className="fa fa-map-marker-alt text-brand-red"></i>
-                  <span>{city}</span>
-                  <i className="fa fa-chevron-down text-xs"></i>
+                  <span className="hidden md:inline">{city}</span>
+                  <span className="md:hidden">{city.split(' ')[0]}</span>
+                  <i className="fa fa-chevron-down text-xs hidden md:inline"></i>
                 </button>
               )}
               {isTheatreOwnerLoggedIn && theatreOwnerData ? (
@@ -214,16 +216,60 @@ const Header: React.FC = () => {
                      clearMessages();
                      setIsLoginModalOpen(true);
                    }}
-                   className="bg-brand-red text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+                   className="bg-brand-red text-white px-3 md:px-4 py-2 rounded-md hover:bg-red-600 transition-colors text-sm md:text-base"
                  >
-                  Login
+                  <span className="hidden sm:inline">Login</span>
+                  <span className="sm:hidden">Login</span>
                 </button>
               )}
-              <button className="md:hidden">
-                <i className="fa fa-bars text-xl"></i>
+              <button 
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden text-white hover:text-brand-red transition-colors p-2"
+                aria-label="Toggle mobile menu"
+              >
+                <i className={`fa ${isMobileMenuOpen ? 'fa-times' : 'fa-bars'} text-xl`}></i>
               </button>
             </div>
           </div>
+          
+          {/* Mobile Menu */}
+          {isMobileMenuOpen && (
+            <div className="md:hidden border-t border-brand-dark py-4 animate-fade-in">
+              {!isTheatreOwnerPage && (
+                <>
+                  <nav className="space-y-2 mb-4">
+                    <Link 
+                      to="/" 
+                      className="block text-white hover:text-brand-red transition-colors px-2 py-2"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Home
+                    </Link>
+                  </nav>
+                  <div className="relative mb-4">
+                    <i className="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input
+                      type="text"
+                      placeholder="Search for Movies, Events, Plays..."
+                      className="bg-white text-black rounded-md py-2 pl-10 pr-4 w-full focus:outline-none"
+                    />
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setIsCityModalOpen(true);
+                      resetDetectionState();
+                      setIsMobileMenuOpen(false);
+                    }} 
+                    className="w-full flex items-center justify-center space-x-2 hover:bg-brand-dark px-3 py-2 rounded-md transition-colors text-white"
+                  >
+                    <i className="fa fa-map-marker-alt text-brand-red"></i>
+                    <span>{city}</span>
+                    <i className="fa fa-chevron-down text-xs"></i>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -231,7 +277,7 @@ const Header: React.FC = () => {
         setIsCityModalOpen(false);
         resetDetectionState();
       }}>
-        <h2 className="text-xl font-bold mb-4 text-gray-800">Select Your City</h2>
+        <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800">Select Your City</h2>
         
         <div className="mb-4">
           <button
@@ -287,12 +333,12 @@ const Header: React.FC = () => {
             <div className="flex-grow border-t border-gray-300"></div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
           {POPULAR_CITIES.map((c) => (
             <button
               key={c}
               onClick={() => handleCitySelect(c)}
-              className="py-2 px-4 bg-gray-100 text-gray-700 rounded-md hover:bg-brand-red hover:text-white transition-colors"
+              className="py-2 sm:py-2.5 px-3 sm:px-4 bg-gray-100 text-gray-700 rounded-md hover:bg-brand-red hover:text-white transition-colors text-sm sm:text-base"
             >
               {c}
             </button>

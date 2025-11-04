@@ -614,7 +614,6 @@ const ManageScreensAndShows: React.FC = () => {
             <div>
               <label className="block text-sm text-gray-400 mb-1">Showtimes</label>
               <div className="space-y-2">
-              <input value={showtimesInput} onChange={(e)=>setShowtimesInput(e.target.value)} placeholder="e.g. 10:00 AM, 1:30 PM" className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2" />
                 {availableTimings.length > 0 && (
                   <div className="space-y-2">
                     <div className="text-xs text-gray-400">Available timings for {selectedDate}:</div>

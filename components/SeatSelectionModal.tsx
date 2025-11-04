@@ -216,19 +216,20 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gradient-to-br from-brand-gray to-brand-dark rounded-2xl p-6 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-gradient-to-br from-brand-gray to-brand-dark rounded-xl sm:rounded-2xl p-4 sm:p-6 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Select Your Seats</h2>
-            <p className="text-brand-light-gray">
+        <div className="flex justify-between items-start sm:items-center mb-4 sm:mb-6 gap-4">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-1 sm:mb-2">Select Your Seats</h2>
+            <p className="text-brand-light-gray text-xs sm:text-sm break-words">
               {movieTitle} • {showtime} • {bookingDate} • Screen {screenId}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl"
+            className="text-gray-400 hover:text-white text-xl sm:text-2xl flex-shrink-0"
+            aria-label="Close"
           >
             ×
           </button>
@@ -260,17 +261,17 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
 
         {/* Selected Seats Summary */}
         {selectedSeats.length > 0 && (
-          <div className="bg-brand-dark rounded-xl p-4 mb-6">
-            <h3 className="text-lg font-semibold text-white mb-3">Selected Seats</h3>
-            <div className="flex flex-wrap gap-2 mb-3">
+          <div className="bg-brand-dark rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
+            <h3 className="text-base sm:text-lg font-semibold text-white mb-2 sm:mb-3">Selected Seats</h3>
+            <div className="flex flex-wrap gap-2 mb-2 sm:mb-3">
               {selectedSeats.map((seat, index) => (
-                <div key={index} className="bg-brand-red text-white px-3 py-1 rounded-lg text-sm">
+                <div key={index} className="bg-brand-red text-white px-2 sm:px-3 py-1 rounded-lg text-xs sm:text-sm">
                   {seat.rowLabel}{seat.number} - ₹{seat.price}
                 </div>
               ))}
             </div>
             <div className="text-right">
-              <span className="text-2xl font-bold text-white">
+              <span className="text-xl sm:text-2xl font-bold text-white">
                 Total: ₹{totalAmount}
               </span>
             </div>
@@ -285,17 +286,17 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
         )}
 
         {/* Action Buttons */}
-        <div className="flex justify-end gap-4">
+        <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
           <button
             onClick={onClose}
-            className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors"
+            className="bg-gray-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-gray-700 transition-colors text-sm sm:text-base order-2 sm:order-1"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirmBooking}
             disabled={selectedSeats.length === 0 || isBooking}
-            className="bg-brand-red text-white px-8 py-3 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-brand-red text-white px-4 sm:px-6 md:px-8 py-2 sm:py-3 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base order-1 sm:order-2"
           >
             {isBooking ? 'Processing...' : `Book ${selectedSeats.length} Seat${selectedSeats.length !== 1 ? 's' : ''}`}
           </button>

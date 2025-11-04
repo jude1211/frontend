@@ -251,6 +251,13 @@ const TheatreOwnerDashboard: React.FC = () => {
                   <span>Manage Snacks</span>
                   <i className="fas fa-utensils"></i>
                 </button>
+                <button 
+                  onClick={() => navigate('/theatre-owner/analytics')}
+                  className="bg-gray-700 rounded-lg p-4 text-left hover:bg-gray-600 transition w-full"
+                >
+                  <h3 className="text-white font-semibold mb-2">Booking Analytics</h3>
+                  <p className="text-gray-400 text-sm">Comprehensive booking insights and reports</p>
+                </button>
               </div>
             </div>
           </div>

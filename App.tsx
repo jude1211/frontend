@@ -25,6 +25,7 @@ import ScreenManagement from './theatre-owner/ScreenManagement';
 import ManageScreensAndShows from './theatre-owner/ManageScreensAndShows';
 import ManageShowTimings from './theatre-owner/ManageShowTimings';
 import SnacksManagement from './theatre-owner/SnacksManagement';
+import BookingAnalytics from './theatre-owner/BookingAnalytics';
 import TheatreOwnerReports from './pages/TheatreOwnerReports';
 import TheatreOwnerProfile from './pages/TheatreOwnerProfile';
 import DynamicMovieLanding from './pages/DynamicMovieLanding';
@@ -39,7 +40,7 @@ const App: React.FC = () => {
         <HashRouter>
           <div className="flex flex-col min-h-screen bg-brand-bg">
             <Header />
-            <main className="flex-grow container mx-auto px-4 py-8">
+            <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/live-movies" element={<DynamicMovieLanding />} />
@@ -117,6 +118,11 @@ const App: React.FC = () => {
                 <Route path="/theatre-owner/snacks" element={
                   <TheatreOwnerProtectedRoute>
                     <SnacksManagement />
+                  </TheatreOwnerProtectedRoute>
+                } />
+                <Route path="/theatre-owner/analytics" element={
+                  <TheatreOwnerProtectedRoute>
+                    <BookingAnalytics />
                   </TheatreOwnerProtectedRoute>
                 } />
                 <Route path="/theatre-owner/reports" element={

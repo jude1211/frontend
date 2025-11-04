@@ -94,9 +94,9 @@ const HomePage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-16">
+    <div className="space-y-8 sm:space-y-12 md:space-y-16">
       {/* Hero Section - Enhanced Banner Carousel */}
-      <div className="relative w-full h-64 md:h-[500px] rounded-2xl overflow-hidden shadow-2xl">
+      <div className="relative w-full h-64 sm:h-80 md:h-[400px] lg:h-[500px] rounded-xl md:rounded-2xl overflow-hidden shadow-2xl">
           {movies.slice(0, 5).map((movie, index) => (
           <div
             key={movie._id || index}
@@ -104,21 +104,21 @@ const HomePage: React.FC = () => {
           >
             <img src={movie.posterUrl} alt={movie.title} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
-            <div className="absolute bottom-0 left-0 p-8 md:p-12">
+            <div className="absolute bottom-0 left-0 p-4 sm:p-6 md:p-8 lg:p-12">
               <div className="max-w-2xl">
-                <h2 className="text-4xl md:text-6xl font-bold text-white mb-4 drop-shadow-2xl">{movie.title}</h2>
-                <p className="text-lg md:text-xl text-gray-300 mb-6 drop-shadow-lg">{movie.genre}</p>
-                <div className="flex items-center space-x-4 mb-6">
+                <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-white mb-2 sm:mb-4 drop-shadow-2xl line-clamp-2">{movie.title}</h2>
+                <p className="text-sm sm:text-base md:text-lg lg:text-xl text-gray-300 mb-3 sm:mb-4 md:mb-6 drop-shadow-lg line-clamp-1">{movie.genre}</p>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-3 sm:mb-4 md:mb-6">
                   {movie.rating && (
-                    <span className="bg-brand-red text-white px-4 py-2 rounded-full text-sm font-semibold">
+                    <span className="bg-brand-red text-white px-2 sm:px-3 md:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm font-semibold">
                       ⭐ {movie.rating}/10
                     </span>
                   )}
-                  <span className="text-white bg-black/30 px-4 py-2 rounded-full text-sm">
+                  <span className="text-white bg-black/30 px-2 sm:px-3 md:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm">
                     {movie.duration}
                   </span>
                 </div>
-                <button className="bg-brand-red text-white px-8 py-3 rounded-lg font-bold hover:bg-red-600 transition-all duration-300 transform hover:scale-105 shadow-lg">
+                <button className="bg-brand-red text-white px-4 sm:px-6 md:px-8 py-2 sm:py-2.5 md:py-3 rounded-lg text-sm sm:text-base font-bold hover:bg-red-600 transition-all duration-300 transform hover:scale-105 shadow-lg">
                   Book Now
                 </button>
               </div>
@@ -138,18 +138,18 @@ const HomePage: React.FC = () => {
 
       {/* Now Showing Section - Enhanced */}
       <div className="animate-fade-in-up">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
           <div>
-            <h2 className="text-4xl font-bold text-white mb-2">Now Showing</h2>
-            <div className="flex items-center space-x-2">
-              <span className="text-brand-red font-semibold">In {city}</span>
-              <span className="text-gray-400">•</span>
-              <span className="text-gray-400 text-sm">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Now Showing</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-brand-red font-semibold text-sm sm:text-base">In {city}</span>
+              <span className="text-gray-400 hidden sm:inline">•</span>
+              <span className="text-gray-400 text-xs sm:text-sm">
                 {movies.filter(m => m._hasAssignedShows).length} movies with showtimes
               </span>
             </div>
           </div>
-          <button className="text-brand-red hover:text-red-400 transition-colors font-semibold">
+          <button className="text-brand-red hover:text-red-400 transition-colors font-semibold text-sm sm:text-base whitespace-nowrap">
             View All →
           </button>
         </div>
@@ -185,8 +185,8 @@ const HomePage: React.FC = () => {
             ))}
           </div>
         )}
-        <div className="text-center mt-12">
-          <button className="bg-gradient-to-r from-brand-red to-red-600 text-white px-8 py-4 rounded-lg font-bold hover:from-red-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 shadow-lg">
+        <div className="text-center mt-8 sm:mt-12">
+          <button className="bg-gradient-to-r from-brand-red to-red-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-sm sm:text-base font-bold hover:from-red-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 shadow-lg">
             Load More Movies →
           </button>
         </div>
@@ -194,12 +194,12 @@ const HomePage: React.FC = () => {
 
       {/* Coming Soon Section - Enhanced */}
       <div className="animate-fade-in-up">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
           <div>
-            <h2 className="text-4xl font-bold text-white mb-2">Coming Soon</h2>
-            <p className="text-gray-400">Get ready for these exciting releases</p>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Coming Soon</h2>
+            <p className="text-gray-400 text-sm sm:text-base">Get ready for these exciting releases</p>
           </div>
-          <button className="text-brand-red hover:text-red-400 transition-colors font-semibold">
+          <button className="text-brand-red hover:text-red-400 transition-colors font-semibold text-sm sm:text-base whitespace-nowrap">
             View All →
           </button>
         </div>
@@ -223,12 +223,12 @@ const HomePage: React.FC = () => {
 
       {/* Featured Events Section - Enhanced */}
       <div className="animate-fade-in-up">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
           <div>
-            <h2 className="text-4xl font-bold text-white mb-2">Featured Events</h2>
-            <p className="text-gray-400">Live shows, concerts & cultural events</p>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Featured Events</h2>
+            <p className="text-gray-400 text-sm sm:text-base">Live shows, concerts & cultural events</p>
           </div>
-          <button className="text-brand-red hover:text-red-400 transition-colors font-semibold">
+          <button className="text-brand-red hover:text-red-400 transition-colors font-semibold text-sm sm:text-base whitespace-nowrap">
             View All →
           </button>
         </div>
@@ -296,22 +296,22 @@ const HomePage: React.FC = () => {
 
       {/* List Your Show Section */}
       <div className="animate-fade-in-up">
-        <div className="bg-gradient-to-r from-brand-gray to-brand-dark rounded-2xl p-8 border border-brand-dark/40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-6">
-              <div className="w-16 h-16 bg-brand-dark rounded-full flex items-center justify-center">
-                <i className="fas fa-tent text-brand-light-gray text-2xl"></i>
+        <div className="bg-gradient-to-r from-brand-gray to-brand-dark rounded-xl md:rounded-2xl p-4 sm:p-6 md:p-8 border border-brand-dark/40">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
+            <div className="flex items-center space-x-4 sm:space-x-6 flex-1">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 bg-brand-dark rounded-full flex items-center justify-center flex-shrink-0">
+                <i className="fas fa-tent text-brand-light-gray text-xl sm:text-2xl"></i>
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-white mb-2">List Your Show</h2>
-                <p className="text-brand-light-gray text-lg">
+                <h2 className="text-xl sm:text-2xl font-bold text-white mb-1 sm:mb-2">List Your Show</h2>
+                <p className="text-brand-light-gray text-sm sm:text-base md:text-lg">
                   Got a show, event, activity or a great experience? Partner with us & get listed on BookNView
                 </p>
               </div>
             </div>
             <button 
               onClick={handleContactClick}
-              className="bg-gradient-to-r from-brand-red to-red-600 text-white px-8 py-4 rounded-xl font-bold hover:from-red-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
+              className="bg-gradient-to-r from-brand-red to-red-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg md:rounded-xl text-sm sm:text-base font-bold hover:from-red-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 shadow-lg w-full md:w-auto"
             >
               Contact Today!
             </button>

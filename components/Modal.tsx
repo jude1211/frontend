@@ -11,7 +11,7 @@ interface ModalProps {
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, className }) => {
   if (!isOpen) return null;
 
-  const containerClasses = (className ? `${className} max-h-[85vh] overflow-y-auto no-scrollbar` : "bg-white rounded-lg p-8 m-4 max-w-lg w-full shadow-xl relative max-h-[85vh] overflow-y-auto no-scrollbar");
+  const containerClasses = (className ? `${className} max-h-[85vh] overflow-y-auto no-scrollbar` : "bg-white rounded-lg p-4 sm:p-6 md:p-8 m-2 sm:m-4 max-w-lg w-full max-w-[calc(100vw-1rem)] sm:max-w-lg shadow-xl relative max-h-[85vh] overflow-y-auto no-scrollbar");
 
   return (
     <div

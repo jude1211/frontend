@@ -210,52 +210,52 @@ const MovieDetailPage: React.FC = () => {
       </div>
 
       {/* Movie Info */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
         <div className="md:col-span-2 space-y-4">
-          <div className="flex items-center gap-4 mb-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-2">
             {movie.status === 'Now Showing' && (
-              <span className="bg-brand-red text-white px-3 py-1 rounded-full text-xs font-bold">Now Showing{movie.runtimeDays ? ` • Day ${movie.runtimeDays}` : ''}</span>
+              <span className="bg-brand-red text-white px-2 sm:px-3 py-1 rounded-full text-xs font-bold">Now Showing{movie.runtimeDays ? ` • Day ${movie.runtimeDays}` : ''}</span>
             )}
             {movie.status === 'Coming Soon' && (
-              <span className="bg-yellow-600 text-white px-3 py-1 rounded-full text-xs font-bold">Coming Soon{movie.releaseDate ? ` • Releases ${movie.releaseDate}` : ''}</span>
+              <span className="bg-yellow-600 text-white px-2 sm:px-3 py-1 rounded-full text-xs font-bold">Coming Soon{movie.releaseDate ? ` • Releases ${movie.releaseDate}` : ''}</span>
             )}
             {movie.advanceBookingEnabled && movie.status === 'Coming Soon' && (
-              <span className="bg-green-600 text-white px-3 py-1 rounded-full text-xs font-bold ml-2">Advance Booking Open</span>
+              <span className="bg-green-600 text-white px-2 sm:px-3 py-1 rounded-full text-xs font-bold">Advance Booking Open</span>
             )}
           </div>
-          <h1 className="text-5xl font-bold text-white">{movie.title}</h1>
-          <div className="flex items-center space-x-4 text-gray-300">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white">{movie.title}</h1>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-gray-300 text-sm sm:text-base">
             <MovieRating movieId={movie.id} showUserRating={true} />
             <span>{movie.genre}</span>
             <span>{movie.duration}</span>
           </div>
-          <p className="text-lg text-gray-300">{movie.description}</p>
+          <p className="text-sm sm:text-base md:text-lg text-gray-300">{movie.description}</p>
           {/* Cast Section */}
           <CastScroller cast={cast} />
         </div>
-        <div>
-          <img src={movie.posterUrl} alt={movie.title} className="rounded-lg shadow-lg w-full" />
+        <div className="flex justify-center md:justify-start">
+          <img src={movie.posterUrl} alt={movie.title} className="rounded-lg shadow-lg w-full max-w-xs md:max-w-none" />
         </div>
       </div>
 
       {/* Date Selection Bar */}
-      <div className="bg-brand-gray p-6 rounded-lg">
-        <h2 className="text-3xl font-bold mb-6 text-white">Select Date & Showtimes</h2>
+      <div className="bg-brand-gray p-4 sm:p-6 rounded-lg">
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-4 sm:mb-6 text-white">Select Date & Showtimes</h2>
         
         {/* Date Selection Bar */}
         {dateOptions.length > 0 ? (
-          <div className="bg-brand-dark rounded-lg p-4 mb-6">
-            <div className="flex items-center justify-between">
-              <button className="p-2 text-gray-400 hover:text-white transition-colors">
-                <i className="fas fa-chevron-left text-lg"></i>
+          <div className="bg-brand-dark rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+            <div className="flex items-center justify-between gap-2">
+              <button className="p-2 text-gray-400 hover:text-white transition-colors flex-shrink-0">
+                <i className="fas fa-chevron-left text-base sm:text-lg"></i>
               </button>
               
-              <div className="flex space-x-2 flex-wrap justify-center">
+              <div className="flex space-x-1 sm:space-x-2 flex-wrap justify-center flex-1 overflow-x-auto">
                 {dateOptions.map((dateOption) => (
                   <button
                     key={dateOption.value}
                     onClick={() => handleDateSelect(dateOption.value)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 ${
+                    className={`px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-300 ${
                       dateOption.isSelected
                         ? 'bg-red-600 text-white shadow-lg transform scale-105'
                         : dateOption.isToday
@@ -268,8 +268,8 @@ const MovieDetailPage: React.FC = () => {
                 ))}
               </div>
               
-              <button className="p-2 text-gray-400 hover:text-white transition-colors">
-                <i className="fas fa-chevron-right text-lg"></i>
+              <button className="p-2 text-gray-400 hover:text-white transition-colors flex-shrink-0">
+                <i className="fas fa-chevron-right text-base sm:text-lg"></i>
               </button>
             </div>
           </div>
@@ -284,21 +284,21 @@ const MovieDetailPage: React.FC = () => {
 
         {/* Selected Date Info */}
         {selectedDate && (
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-xl font-semibold text-white">
+          <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <h3 className="text-base sm:text-lg md:text-xl font-semibold text-white">
               Showtimes for {formatDateForDisplay(selectedDate)}
             </h3>
-            <div className="flex items-center space-x-4 text-sm text-gray-300">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-300">
               <div className="flex items-center">
-                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full mr-1 sm:mr-2"></div>
                 <span>Available</span>
               </div>
               <div className="flex items-center">
-                <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+                <div className="w-2 h-2 sm:w-3 sm:h-3 bg-yellow-500 rounded-full mr-1 sm:mr-2"></div>
                 <span>Fast Filling</span>
               </div>
               <div className="flex items-center">
-                <div className="w-3 h-3 bg-gray-500 rounded-full mr-2"></div>
+                <div className="w-2 h-2 sm:w-3 sm:h-3 bg-gray-500 rounded-full mr-1 sm:mr-2"></div>
                 <span>Past Showtime</span>
               </div>
             </div>
@@ -311,8 +311,8 @@ const MovieDetailPage: React.FC = () => {
             <div className="text-gray-400">No showtimes available for {formatDateForDisplay(selectedDate)}.</div>
           ) : (
             getFilteredScreens().map((screen) => (
-              <div key={screen.screenId} className="bg-brand-dark p-4 rounded-md mb-4">
-                <div className="text-white font-semibold mb-2">Screen {screen.screenNumber || screen.screenId} {screen.screenType && <span className="text-xs text-gray-400 ml-2">({screen.screenType})</span>}</div>
+              <div key={screen.screenId} className="bg-brand-dark p-3 sm:p-4 rounded-md mb-4">
+                <div className="text-white font-semibold mb-2 text-sm sm:text-base">Screen {screen.screenNumber || screen.screenId} {screen.screenType && <span className="text-xs text-gray-400 ml-2">({screen.screenType})</span>}</div>
                 {screen.showGroups.map((group: any, idx: number) => (
                   <div key={idx} className="mb-2">
                     <div className="text-xs text-gray-300 mb-1">{group.theatre}</div>
@@ -323,7 +323,7 @@ const MovieDetailPage: React.FC = () => {
                           <button
                             key={`${screen.screenId}-${group.bookingDate}-${t}`}
                             onClick={() => !showtimeStatus.disabled && handleShowtimeSelect(screen.screenId, group.bookingDate, t)}
-                            className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                            className={`relative px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 ${
                               showtimeStatus.disabled
                                 ? 'bg-gray-500 text-gray-300 cursor-not-allowed opacity-50'
                                 : 'bg-green-600 text-white hover:bg-green-700 hover:scale-105 shadow-md'
@@ -333,7 +333,7 @@ const MovieDetailPage: React.FC = () => {
                           >
                             <span className="flex items-center">
                               {!showtimeStatus.disabled && (
-                                <div className="w-2 h-2 bg-white rounded-full mr-2"></div>
+                                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full mr-1.5 sm:mr-2"></div>
                               )}
                               <i className="fas fa-clock mr-1 text-xs"></i>
                               {t}

@@ -4,12 +4,12 @@ import React from 'react';
 const Footer: React.FC = () => {
   return (
     <footer className="bg-brand-dark text-white">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 md:py-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
           {/* BookNView Branding */}
-          <div className="md:col-span-1">
-            <h3 className="text-2xl font-bold text-brand-red mb-4">BookNView</h3>
-            <p className="text-gray-300 mb-6">
+          <div className="sm:col-span-2 lg:col-span-1">
+            <h3 className="text-xl sm:text-2xl font-bold text-brand-red mb-3 sm:mb-4">BookNView</h3>
+            <p className="text-gray-300 mb-4 sm:mb-6 text-sm sm:text-base">
               Your ultimate destination for booking movie tickets, events, and entertainment experiences across the globe.
             </p>
             <div className="flex space-x-4">
@@ -55,18 +55,18 @@ const Footer: React.FC = () => {
           </div>
 
           {/* Stay Updated */}
-          <div>
-            <h4 className="text-lg font-semibold mb-4">Stay Updated</h4>
-            <p className="text-gray-300 mb-4">
+          <div className="sm:col-span-2 lg:col-span-1">
+            <h4 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Stay Updated</h4>
+            <p className="text-gray-300 mb-3 sm:mb-4 text-sm sm:text-base">
               Subscribe to get the latest movie updates and exclusive offers.
             </p>
-            <div className="flex">
+            <div className="flex flex-col sm:flex-row">
               <input
                 type="email"
                 placeholder="Enter your email"
-                className="flex-1 bg-brand-gray text-white px-3 py-2 rounded-l-md focus:outline-none focus:ring-2 focus:ring-brand-red"
+                className="flex-1 bg-brand-gray text-white px-3 py-2 rounded-t-md sm:rounded-l-md sm:rounded-t-none focus:outline-none focus:ring-2 focus:ring-brand-red text-sm sm:text-base"
               />
-              <button className="bg-brand-red text-white px-4 py-2 rounded-r-md hover:bg-red-600 transition-colors">
+              <button className="bg-brand-red text-white px-4 py-2 rounded-b-md sm:rounded-r-md sm:rounded-b-none hover:bg-red-600 transition-colors text-sm sm:text-base whitespace-nowrap">
                 Subscribe
               </button>
             </div>
@@ -74,15 +74,15 @@ const Footer: React.FC = () => {
         </div>
 
         {/* Contact Information */}
-        <div className="border-t border-gray-700 mt-8 pt-8">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="text-gray-300 text-sm mb-4 md:mb-0">
+        <div className="border-t border-gray-700 mt-6 sm:mt-8 pt-6 sm:pt-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="text-gray-300 text-xs sm:text-sm text-center md:text-left">
               <p>support@booknview.com</p>
               <p>+91 80 2720 8080</p>
               <p>Available in 100+ cities</p>
             </div>
             <div className="text-center">
-              <p className="text-gray-400 text-sm">
+              <p className="text-gray-400 text-xs sm:text-sm">
                 © 2024 BookNView. All rights reserved. | Made with ❤️ for movie lovers
               </p>
             </div>

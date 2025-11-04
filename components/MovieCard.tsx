@@ -18,7 +18,7 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
           <img 
             src={movie.posterUrl} 
             alt={movie.title} 
-            className="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-500"
+            className="w-full h-48 sm:h-64 md:h-80 object-cover group-hover:scale-110 transition-transform duration-500"
           />
           {/* Overlay with rating */}
           <div className="absolute top-3 right-3">
@@ -43,14 +43,14 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
         </div>
 
         {/* Movie Info */}
-        <div className="p-4">
-          <h3 className="font-bold text-white text-lg mb-2 group-hover:text-brand-red transition-colors line-clamp-2">
+        <div className="p-3 sm:p-4">
+          <h3 className="font-bold text-white text-sm sm:text-base md:text-lg mb-2 group-hover:text-brand-red transition-colors line-clamp-2">
             {movie.title}
           </h3>
           
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-gray-400 text-sm">{movie.genre.split('/')[0]}</span>
-            <span className="text-brand-red text-sm font-semibold">{movie.duration}</span>
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <span className="text-gray-400 text-xs sm:text-sm">{movie.genre.split('/')[0]}</span>
+            <span className="text-brand-red text-xs sm:text-sm font-semibold">{movie.duration}</span>
           </div>
 
 

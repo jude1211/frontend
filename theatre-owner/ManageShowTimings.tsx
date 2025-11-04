@@ -345,16 +345,6 @@ const ManageShowTimings: React.FC = () => {
                         className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2"
                       />
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm text-gray-400 mb-1">Showtimes (comma separated)</label>
-                      <input
-                        type="text"
-                        value={specialTimingsInput}
-                        onChange={(e) => setSpecialTimingsInput(e.target.value)}
-                        placeholder="e.g. 10:00 AM, 1:30 PM, 7:00 PM"
-                        className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2"
-                      />
-                    </div>
                   </div>
                   <div className="flex gap-2 mt-4">
                     <button
