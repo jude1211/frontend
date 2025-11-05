@@ -142,20 +142,25 @@ class ApiService {
     const fetchPromise = (async () => {
       for (const base of API_BASE_CANDIDATES) {
         try {
-          // Longer timeout for uploads (multipart), shorter for JSON
-          const timeoutMs = isFormData ? 30000 : 8000;
+          // Adaptive timeout: longer for uploads, and increase on retries to tolerate cold starts/network
+          const baseTimeoutMs = isFormData ? 60000 : 20000;
+          const timeoutMs = baseTimeoutMs + retryCount * 7000;
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
           const defaultHeaders = this.getAuthHeaders(isFormData);
           const optionHeaders = (options.headers || {}) as HeadersInit;
           // Merge headers so Authorization is preserved while allowing overrides like Content-Type
           const mergedHeaders: HeadersInit = { ...(defaultHeaders as any), ...(optionHeaders as any) };
-          const response = await fetch(`${base}${endpoint}`, {
-            ...options,
-            headers: mergedHeaders,
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
+          let response: Response;
+          try {
+            response = await fetch(`${base}${endpoint}`, {
+              ...options,
+              headers: mergedHeaders,
+              signal: controller.signal
+            });
+          } finally {
+            clearTimeout(timeoutId);
+          }
           let data: any = null;
           try {
             data = await response.json();
@@ -187,7 +192,14 @@ class ApiService {
             throw error;
           }
           return data as ApiResponse<T>;
-        } catch (err) {
+        } catch (err: any) {
+          // If this was an AbortError (likely client-side timeout), allow a limited retry with extended timeout
+          if (err?.name === 'AbortError' && retryCount < 2) {
+            const retryDelay = 500 + retryCount * 500;
+            console.warn(`⏱️ Request timed out after ${timeoutMs}ms. Retrying in ${retryDelay}ms (attempt ${retryCount + 1}/2)`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            return this.tryFetch<T>(endpoint, options, isFormData, useCache, retryCount + 1);
+          }
           lastError = err;
           // Try next candidate
           continue;
