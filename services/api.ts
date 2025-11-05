@@ -1,6 +1,15 @@
 // API service for backend integration
-// Prefer Vite env; fallback to localhost:5000
-const VITE_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
+// Normalize base URL: ensure it includes /api/v1 when Vite env is provided
+const RAW_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
+const normalizeApiBase = (base?: string): string | undefined => {
+  if (!base) return undefined;
+  const trimmed = base.replace(/\/+$/, '');
+  // If it already ends with /api/v{n}, keep as-is; otherwise append /api/v1
+  if (/\/api\/v\d+$/.test(trimmed)) return trimmed;
+  return `${trimmed}/api/v1`;
+};
+
+const VITE_BASE = normalizeApiBase(RAW_BASE);
 const DEFAULT_BASES = ['https://backend-bnv.onrender.com/api/v1'];
 const API_BASE_CANDIDATES = VITE_BASE ? [VITE_BASE] : DEFAULT_BASES;
 
@@ -141,11 +150,11 @@ class ApiService {
     let lastError: any;
     const fetchPromise = (async () => {
       for (const base of API_BASE_CANDIDATES) {
+        // Prepare per-attempt timeout and controller outside inner try to avoid scope issues
+        const timeoutMs = isFormData ? 30000 : 12000;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         try {
-          // Longer timeout for uploads (multipart), shorter for JSON
-          const timeoutMs = isFormData ? 30000 : 8000;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
           const defaultHeaders = this.getAuthHeaders(isFormData);
           const optionHeaders = (options.headers || {}) as HeadersInit;
           // Merge headers so Authorization is preserved while allowing overrides like Content-Type
@@ -155,7 +164,6 @@ class ApiService {
             headers: mergedHeaders,
             signal: controller.signal
           });
-          clearTimeout(timeoutId);
           let data: any = null;
           try {
             data = await response.json();
@@ -187,10 +195,17 @@ class ApiService {
             throw error;
           }
           return data as ApiResponse<T>;
-        } catch (err) {
-          lastError = err;
+        } catch (err: any) {
+          // Map AbortError to a clearer timeout error
+          if (err?.name === 'AbortError') {
+            lastError = new Error('Request timed out');
+          } else {
+            lastError = err;
+          }
           // Try next candidate
           continue;
+        } finally {
+          clearTimeout(timeoutId);
         }
       }
       throw lastError || new Error('Network error');
@@ -717,7 +732,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    });
+    }, false);
   }
 
   async updateTheatreOwnerProfile(profileData: any): Promise<ApiResponse<any>> {
@@ -797,7 +812,7 @@ class ApiService {
   // Movie Management Methods for Theatre Owners
   async addMovie(movieData: any): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>('/movies', {
+    const result = await this.makeRequest<any>('/movies', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -805,6 +820,17 @@ class ApiService {
       },
       body: JSON.stringify(movieData)
     });
+    // Invalidate owner movie lists and general movie listings
+    if (result?.success) {
+      try {
+        requestCache.clearPattern('^GET:/movies/theatre-owner/');
+        requestCache.clearPattern('^GET:/movies($|\\?)');
+        requestCache.clearPattern('^GET:/movies/active-with-shows');
+        requestCache.clearPattern('^GET:/movies/now-showing');
+        requestCache.clearPattern('^GET:/movies/coming-soon');
+      } catch {}
+    }
+    return result;
   }
 
   async getTheatreOwnerMovies(theatreOwnerId: string): Promise<ApiResponse<any[]>> {
@@ -813,12 +839,12 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    });
+    }, false);
   }
 
   async updateMovie(movieId: string, movieData: any): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/movies/${movieId}`, {
+    const result = await this.makeRequest<any>(`/movies/${movieId}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -826,16 +852,36 @@ class ApiService {
       },
       body: JSON.stringify(movieData)
     });
+    if (result?.success) {
+      try {
+        requestCache.clearPattern('^GET:/movies/theatre-owner/');
+        requestCache.clearPattern('^GET:/movies($|\\?)');
+        requestCache.clearPattern('^GET:/movies/active-with-shows');
+        requestCache.clearPattern('^GET:/movies/now-showing');
+        requestCache.clearPattern('^GET:/movies/coming-soon');
+      } catch {}
+    }
+    return result;
   }
 
   async deleteMovie(movieId: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/movies/${movieId}`, {
+    const result = await this.makeRequest<any>(`/movies/${movieId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
+    if (result?.success) {
+      try {
+        requestCache.clearPattern('^GET:/movies/theatre-owner/');
+        requestCache.clearPattern('^GET:/movies($|\\?)');
+        requestCache.clearPattern('^GET:/movies/active-with-shows');
+        requestCache.clearPattern('^GET:/movies/now-showing');
+        requestCache.clearPattern('^GET:/movies/coming-soon');
+      } catch {}
+    }
+    return result;
   }
 
   // Screen Layout APIs
@@ -891,7 +937,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    });
+    }, false);
   }
 
   async syncScreenLayouts(ownerId: string): Promise<ApiResponse<any>> {
@@ -907,7 +953,7 @@ class ApiService {
 
   async addOwnerScreen(ownerId: string, payload: { name?: string; type?: string }): Promise<ApiResponse<{ screenCount: number; screens: any[] }>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<{ screenCount: number; screens: any[] }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens`, {
+    const result = await this.makeRequest<{ screenCount: number; screens: any[] }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -915,17 +961,29 @@ class ApiService {
       },
       body: JSON.stringify(payload || {})
     });
+    if (result?.success) {
+      try {
+        requestCache.clearPattern('^GET:/theatres/owner/.*/screens');
+      } catch {}
+    }
+    return result;
   }
 
   async deleteOwnerScreen(ownerId: string, screenId: string): Promise<ApiResponse<{ message: string }>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<{ message: string }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenId)}`, {
+    const result = await this.makeRequest<{ message: string }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenId)}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     });
+    if (result?.success) {
+      try {
+        requestCache.clearPattern('^GET:/theatres/owner/.*/screens');
+      } catch {}
+    }
+    return result;
   }
 
   async updateScreenConfiguration(ownerId: string, screenNumber: string, payload: { 
@@ -936,7 +994,7 @@ class ApiService {
     seatingCapacity?: string; 
   }): Promise<ApiResponse<{ message: string; screen: any }>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<{ message: string; screen: any }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenNumber)}`, {
+    const result = await this.makeRequest<{ message: string; screen: any }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenNumber)}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -944,6 +1002,12 @@ class ApiService {
       },
       body: JSON.stringify(payload || {})
     });
+    if (result?.success) {
+      try {
+        requestCache.clearPattern('^GET:/theatres/owner/.*/screens');
+      } catch {}
+    }
+    return result;
   }
 
   // Screen Shows APIs
@@ -954,7 +1018,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    });
+    }, false);
   }
 
   async saveScreenShows(screenId: string, movieId: string, showtimes: string[], bookingDate?: string, maxDays?: number): Promise<ApiResponse<any>> {

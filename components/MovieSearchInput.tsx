@@ -55,7 +55,14 @@ export interface MovieSearchInputProps {
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || 'your-tmdb-api-key-here';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-const API_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL || 'https://backend-bnv.onrender.com/api/v1';
+const RAW_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
+const normalizeApiBase = (base?: string): string => {
+  if (!base) return 'https://backend-bnv.onrender.com/api/v1';
+  const trimmed = base.replace(/\/+$/, '');
+  if (/\/api\/v\d+$/.test(trimmed)) return trimmed;
+  return `${trimmed}/api/v1`;
+};
+const API_BASE = normalizeApiBase(RAW_BASE);
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 
 const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
