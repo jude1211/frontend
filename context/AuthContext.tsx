@@ -3,8 +3,7 @@ import {
   User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   signOut,
   onAuthStateChanged,
   updateProfile,
@@ -62,28 +61,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setCurrentUser(user);
       setIsLoading(false);
     });
-
-    // Complete Google redirect sign-in, if any
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result?.user) {
-          const googleUserData = {
-            uid: result.user.uid,
-            email: result.user.email,
-            displayName: result.user.displayName,
-            photoURL: result.user.photoURL,
-            emailVerified: result.user.emailVerified
-          };
-          try {
-            const response = await apiService.googleAuth(googleUserData);
-            if (response.success && response.data) {
-              setUserData(response.data.user);
-              setCurrentUser(result.user);
-            }
-          } catch (_) {}
-        }
-      })
-      .catch(() => {});
 
     return unsubscribe;
   }, []);
@@ -177,16 +154,55 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return false;
       }
 
-      // Use redirect-based sign-in to avoid popup/cross-origin issues
-      await signInWithRedirect(auth, googleProvider);
-      return true; // Flow will continue in getRedirectResult handler
+      // Sign in with Google via Firebase
+      const result = await signInWithPopup(auth, googleProvider);
+
+      console.log('🔥 Firebase Google login successful!');
+      console.log('👤 Google user info from Firebase:', {
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+        emailVerified: result.user.emailVerified
+      });
+
+      // Send user data directly to backend (no need for token verification)
+      const googleUserData = {
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+        emailVerified: result.user.emailVerified
+      };
+
+      console.log('📤 Sending Google user data to backend...');
+      const response = await apiService.googleAuth(googleUserData);
+
+      if (response.success && response.data) {
+        setUserData(response.data.user);
+        setCurrentUser(result.user); // Also set Firebase user
+        console.log('✅ Google user data stored in MongoDB:', response.data.user);
+        return true;
+      } else {
+        console.error('❌ Backend Google auth failed:', response);
+        setAuthError(response.message || 'Failed to store Google user data');
+        return false;
+      }
     } catch (error) {
       const authError = error as AuthError;
       console.error('Google login error:', authError);
 
       // Handle specific Google auth errors
       switch (authError.code) {
-        // Popup-related errors should be irrelevant with redirect, keep generic handling
+        case 'auth/popup-closed-by-user':
+          setAuthError('Sign-in was cancelled.');
+          break;
+        case 'auth/popup-blocked':
+          setAuthError('Pop-up was blocked by your browser. Please allow pop-ups and try again.');
+          break;
+        case 'auth/cancelled-popup-request':
+          setAuthError('Sign-in was cancelled.');
+          break;
         case 'auth/account-exists-with-different-credential':
           setAuthError('An account already exists with the same email but different sign-in credentials.');
           break;
