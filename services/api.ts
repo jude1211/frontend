@@ -233,6 +233,9 @@ class ApiService {
         }
         
         requestCache.set(endpoint, result, ttl);
+      } else if ((options.method && options.method !== 'GET') && result.success) {
+        // Invalidate related GET caches on successful mutations
+        this.invalidateRelatedCache(endpoint);
       }
       
       return result;
@@ -241,6 +244,51 @@ class ApiService {
       if (useCache && (!options.method || options.method === 'GET')) {
         requestCache.clearPendingRequest(endpoint, options);
       }
+    }
+  }
+
+  // Invalidate cached GET responses related to a mutated endpoint
+  private invalidateRelatedCache(endpoint: string): void {
+    try {
+      const path = endpoint.split('?')[0];
+      const normalized = path.replace(/^\/+/, ''); // remove leading slashes
+      const root = normalized.split('/')[0] || '';
+
+      if (!root) return;
+
+      // Base: clear any GET caches under the same root
+      const basePattern = `^GET:\\/${root}(\\/|\\?|$)`;
+      requestCache.clearPattern(basePattern);
+
+      // Additional targeted invalidations for known relationships
+      switch (root) {
+        case 'movie-ratings':
+          // Ratings affect movie details and lists aggregations
+          requestCache.clearPattern('^GET:\\/movies(\\/|\\?|$)');
+          break;
+        case 'bookings':
+        case 'offline-bookings':
+          requestCache.clearPattern('^GET:\\/users\\/bookings(\\/|\\?|$)');
+          break;
+        case 'screens':
+        case 'show-timings':
+          requestCache.clearPattern('^GET:\\/screens(\\/|\\?|$)');
+          requestCache.clearPattern('^GET:\\/movies(\\/|\\?|$)');
+          break;
+        case 'theatres':
+          requestCache.clearPattern('^GET:\\/theatres(\\/|\\?|$)');
+          break;
+        case 'users':
+          requestCache.clearPattern('^GET:\\/auth\\/me(\\/|\\?|$)');
+          break;
+      }
+
+      // Optional: broadcast a lightweight event for components that opt-in to listen
+      try {
+        window.dispatchEvent(new CustomEvent('api:dataChanged', { detail: { root, endpoint: path } }));
+      } catch {}
+    } catch (e) {
+      console.warn('Cache invalidation error:', e);
     }
   }
   private getAuthHeaders(isFormData: boolean = false): HeadersInit {
@@ -732,7 +780,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    }, false);
+    });
   }
 
   async updateTheatreOwnerProfile(profileData: any): Promise<ApiResponse<any>> {
@@ -766,7 +814,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    }, false);
+    });
   }
 
   async getOfflineBooking(bookingId: string): Promise<ApiResponse<any>> {
@@ -775,7 +823,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    }, false);
+    });
   }
 
   async updateOfflineBookingStatus(bookingId: string, status: string, reason?: string): Promise<ApiResponse<any>> {
@@ -812,7 +860,7 @@ class ApiService {
   // Movie Management Methods for Theatre Owners
   async addMovie(movieData: any): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>('/movies', {
+    return this.makeRequest<any>('/movies', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -820,12 +868,6 @@ class ApiService {
       },
       body: JSON.stringify(movieData)
     });
-    if (result?.success) {
-      // Invalidate owner movies and related lists
-      this.clearCachePattern('^GET:/movies/theatre-owner/');
-      this.clearCachePattern('^GET:/movies/');
-    }
-    return result;
   }
 
   async getTheatreOwnerMovies(theatreOwnerId: string): Promise<ApiResponse<any[]>> {
@@ -834,12 +876,12 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    }, false);
+    });
   }
 
   async updateMovie(movieId: string, movieData: any): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/movies/${movieId}`, {
+    return this.makeRequest<any>(`/movies/${movieId}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -847,33 +889,22 @@ class ApiService {
       },
       body: JSON.stringify(movieData)
     });
-    if (result?.success) {
-      this.clearCachePattern('^GET:/movies/theatre-owner/');
-      this.clearCachePattern(`^GET:/movies/${movieId}$`);
-      this.clearCachePattern('^GET:/screens/.*/shows');
-    }
-    return result;
   }
 
   async deleteMovie(movieId: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/movies/${movieId}`, {
+    return this.makeRequest<any>(`/movies/${movieId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
-    if (result?.success) {
-      this.clearCachePattern('^GET:/movies/theatre-owner/');
-      this.clearCachePattern('^GET:/screens/.*/shows');
-    }
-    return result;
   }
 
   // Screen Layout APIs
   async saveScreenLayout(screenId: string, layoutData: any): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/screens/${screenId}/layout`, {
+    return this.makeRequest<any>(`/screens/${screenId}/layout`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -881,15 +912,11 @@ class ApiService {
       },
       body: JSON.stringify(layoutData)
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/screens/${screenId}/layout`);
-    }
-    return result;
   }
 
   async updateScreenLayout(screenId: string, layoutData: any): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/screens/${screenId}/layout`, {
+    return this.makeRequest<any>(`/screens/${screenId}/layout`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -897,10 +924,6 @@ class ApiService {
       },
       body: JSON.stringify(layoutData)
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/screens/${screenId}/layout`);
-    }
-    return result;
   }
 
   async getScreenLayout(screenId: string): Promise<ApiResponse<any>> {
@@ -931,28 +954,23 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    }, false);
+    });
   }
 
   async syncScreenLayouts(ownerId: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/theatres/owner/${encodeURIComponent(ownerId)}/sync-layouts`, {
+    return this.makeRequest<any>(`/theatres/owner/${encodeURIComponent(ownerId)}/sync-layouts`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/theatres/owner/${ownerId}/screens`);
-      this.clearCachePattern('^GET:/screens/.*/layout');
-    }
-    return result;
   }
 
   async addOwnerScreen(ownerId: string, payload: { name?: string; type?: string }): Promise<ApiResponse<{ screenCount: number; screens: any[] }>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<{ screenCount: number; screens: any[] }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens`, {
+    return this.makeRequest<{ screenCount: number; screens: any[] }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -960,26 +978,17 @@ class ApiService {
       },
       body: JSON.stringify(payload || {})
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/theatres/owner/${ownerId}/screens`);
-    }
-    return result;
   }
 
   async deleteOwnerScreen(ownerId: string, screenId: string): Promise<ApiResponse<{ message: string }>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<{ message: string }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenId)}`, {
+    return this.makeRequest<{ message: string }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenId)}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/theatres/owner/${ownerId}/screens`);
-      this.clearCachePattern(`^GET:/screens/${screenId}/shows`);
-    }
-    return result;
   }
 
   async updateScreenConfiguration(ownerId: string, screenNumber: string, payload: { 
@@ -990,7 +999,7 @@ class ApiService {
     seatingCapacity?: string; 
   }): Promise<ApiResponse<{ message: string; screen: any }>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<{ message: string; screen: any }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenNumber)}`, {
+    return this.makeRequest<{ message: string; screen: any }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenNumber)}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -998,11 +1007,6 @@ class ApiService {
       },
       body: JSON.stringify(payload || {})
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/theatres/owner/${ownerId}/screens`);
-      this.clearCachePattern(`^GET:/screens/${screenNumber}/shows`);
-    }
-    return result;
   }
 
   // Screen Shows APIs
@@ -1013,12 +1017,12 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    }, false);
+    });
   }
 
   async saveScreenShows(screenId: string, movieId: string, showtimes: string[], bookingDate?: string, maxDays?: number): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows`, {
+    return this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1026,44 +1030,32 @@ class ApiService {
       },
       body: JSON.stringify({ movieId, showtimes, bookingDate, maxDays })
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/screens/${screenId}/shows`);
-    }
-    return result;
   }
 
   async deleteScreenShow(screenId: string, showId: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows/${encodeURIComponent(showId)}`, {
+    return this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows/${encodeURIComponent(showId)}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/screens/${screenId}/shows`);
-    }
-    return result;
   }
 
   async cleanupPastScreenShows(screenId: string): Promise<ApiResponse<{ deletedCount: number }>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<{ deletedCount: number }>(`/screens/${encodeURIComponent(screenId)}/shows/cleanup`, {
+    return this.makeRequest<{ deletedCount: number }>(`/screens/${encodeURIComponent(screenId)}/shows/cleanup`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/screens/${screenId}/shows`);
-    }
-    return result;
   }
 
   // Movie advance booking management
   async updateMovieAdvanceBooking(movieId: string, enabled: boolean): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/movies/${encodeURIComponent(movieId)}/advance-booking`, {
+    return this.makeRequest<any>(`/movies/${encodeURIComponent(movieId)}/advance-booking`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1071,10 +1063,6 @@ class ApiService {
       },
       body: JSON.stringify({ enabled })
     });
-    if (result?.success) {
-      this.clearCachePattern('^GET:/movies/theatre-owner/');
-    }
-    return result;
   }
 
   // Show Timings Management APIs
@@ -1084,7 +1072,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    }, false);
+    });
   }
 
   async getAvailableTimings(ownerId: string, date: string): Promise<ApiResponse<any>> {
@@ -1093,12 +1081,12 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    }, false);
+    });
   }
 
   async saveWeekdayTimings(ownerId: string, timings: string[]): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekday`, {
+    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekday`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1106,16 +1094,11 @@ class ApiService {
       },
       body: JSON.stringify({ timings })
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}`);
-      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}/available/`);
-    }
-    return result;
   }
 
   async saveWeekendTimings(ownerId: string, timings: string[]): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekend`, {
+    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekend`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1123,16 +1106,11 @@ class ApiService {
       },
       body: JSON.stringify({ timings })
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}`);
-      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}/available/`);
-    }
-    return result;
   }
 
   async createSpecialTiming(ownerId: string, timings: string[], specialDate: string, description?: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/special`, {
+    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/special`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1140,16 +1118,11 @@ class ApiService {
       },
       body: JSON.stringify({ timings, specialDate, description })
     });
-    if (result?.success) {
-      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}`);
-      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}/available/`);
-    }
-    return result;
   }
 
   async updateSpecialTiming(timingId: string, timings: string[], description?: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
+    return this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1157,26 +1130,16 @@ class ApiService {
       },
       body: JSON.stringify({ timings, description })
     });
-    if (result?.success) {
-      this.clearCachePattern('^GET:/show-timings/owner/');
-      this.clearCachePattern('^GET:/show-timings/owner/.*/available/');
-    }
-    return result;
   }
 
   async deleteSpecialTiming(timingId: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    const result = await this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
+    return this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
-    if (result?.success) {
-      this.clearCachePattern('^GET:/show-timings/owner/');
-      this.clearCachePattern('^GET:/show-timings/owner/.*/available/');
-    }
-    return result;
   }
 }
 
