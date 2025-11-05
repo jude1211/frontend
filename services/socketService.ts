@@ -43,7 +43,7 @@ class SocketService {
     
     this.pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/v1/seat-layout/${screenId}/${bookingDate}/${encodeURIComponent(showtime)}/live`);
+        const response = await fetch(`https://backend-bnv.onrender.com/api/v1/seat-layout/${screenId}/${bookingDate}/${encodeURIComponent(showtime)}/live`);
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.data) {

@@ -1,7 +1,7 @@
 // API service for backend integration
 // Prefer Vite env; fallback to localhost:5000
 const VITE_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
-const DEFAULT_BASES = ['http://localhost:5000/api/v1'];
+const DEFAULT_BASES = ['https://backend-bnv.onrender.com/api/v1'];
 const API_BASE_CANDIDATES = VITE_BASE ? [VITE_BASE] : DEFAULT_BASES;
 
 // Import request cache and throttling

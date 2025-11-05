@@ -35,7 +35,7 @@ const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen, onClo
 
     try {
       console.log('🔐 Sending forgot password request for:', email);
-      console.log('🔐 API Base URL:', 'http://localhost:5000/api/v1');
+      console.log('🔐 API Base URL:', 'https://backend-bnv.onrender.com/api/v1');
       console.log('🔐 Frontend URL:', window.location.origin);
 
       const response = await apiService.forgotPassword(email);

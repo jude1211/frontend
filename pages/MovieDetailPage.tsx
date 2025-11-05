@@ -67,7 +67,7 @@ const MovieDetailPage: React.FC = () => {
         if (tmdbId) {
           const apiKey = (import.meta as any).env?.VITE_TMDB_API_KEY;
           if (apiKey) {
-            const API_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+            const API_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL || 'https://backend-bnv.onrender.com/api/v1';
             const tmdbUrl = `https://api.themoviedb.org/3/movie/${tmdbId}/credits?api_key=${apiKey}`;
             const resp = await fetch(`${API_BASE}/proxy/tmdb?url=${encodeURIComponent(tmdbUrl)}`);
             const data = await resp.json();
