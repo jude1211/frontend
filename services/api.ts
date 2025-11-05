@@ -155,15 +155,36 @@ class ApiService {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         try {
+<<<<<<< HEAD
+=======
+          // Adaptive timeout: longer for uploads, and increase on retries to tolerate cold starts/network
+          const baseTimeoutMs = isFormData ? 60000 : 20000;
+          const timeoutMs = baseTimeoutMs + retryCount * 7000;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+>>>>>>> 06418c496faa4db000526a28cae21874bdd023e4
           const defaultHeaders = this.getAuthHeaders(isFormData);
           const optionHeaders = (options.headers || {}) as HeadersInit;
           // Merge headers so Authorization is preserved while allowing overrides like Content-Type
           const mergedHeaders: HeadersInit = { ...(defaultHeaders as any), ...(optionHeaders as any) };
+<<<<<<< HEAD
           const response = await fetch(`${base}${endpoint}`, {
             ...options,
             headers: mergedHeaders,
             signal: controller.signal
           });
+=======
+          let response: Response;
+          try {
+            response = await fetch(`${base}${endpoint}`, {
+              ...options,
+              headers: mergedHeaders,
+              signal: controller.signal
+            });
+          } finally {
+            clearTimeout(timeoutId);
+          }
+>>>>>>> 06418c496faa4db000526a28cae21874bdd023e4
           let data: any = null;
           try {
             data = await response.json();
@@ -196,12 +217,23 @@ class ApiService {
           }
           return data as ApiResponse<T>;
         } catch (err: any) {
+<<<<<<< HEAD
           // Map AbortError to a clearer timeout error
           if (err?.name === 'AbortError') {
             lastError = new Error('Request timed out');
           } else {
             lastError = err;
           }
+=======
+          // If this was an AbortError (likely client-side timeout), allow a limited retry with extended timeout
+          if (err?.name === 'AbortError' && retryCount < 2) {
+            const retryDelay = 500 + retryCount * 500;
+            console.warn(`⏱️ Request timed out after ${timeoutMs}ms. Retrying in ${retryDelay}ms (attempt ${retryCount + 1}/2)`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            return this.tryFetch<T>(endpoint, options, isFormData, useCache, retryCount + 1);
+          }
+          lastError = err;
+>>>>>>> 06418c496faa4db000526a28cae21874bdd023e4
           // Try next candidate
           continue;
         } finally {
