@@ -768,7 +768,7 @@ const LiveSeatLayoutPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-dark via-brand-gray to-brand-dark">
+    <div className="min-h-screen bg-gradient-to-br from-brand-dark via-brand-gray to-brand-dark overflow-x-hidden">
       {/* Ticket Selection Modal */}
       {showTicketModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1002,9 +1002,9 @@ const LiveSeatLayoutPage: React.FC = () => {
         </div>
       )}
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8 max-w-screen-lg">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-6 sm:mb-8">
           <button
             onClick={() => navigate(`/movie/${movieId}`)}
             className="flex items-center text-brand-light-gray hover:text-white transition-colors"
@@ -1013,8 +1013,8 @@ const LiveSeatLayoutPage: React.FC = () => {
             Back to Movie
           </button>
           <div className="text-right">
-            <h1 className="text-2xl font-bold text-white">Live Seat Layout</h1>
-            <p className="text-brand-light-gray text-sm">
+            <h1 className="text-xl sm:text-2xl font-bold text-white text-center sm:text-right">Live Seat Layout</h1>
+            <p className="text-brand-light-gray text-xs sm:text-sm text-center sm:text-right">
               {screen?.screenName || `Screen ${screenId}`} • {bookingDate} • {showtime}
             </p>
           </div>
@@ -1022,8 +1022,8 @@ const LiveSeatLayoutPage: React.FC = () => {
 
         {/* Movie Info */}
         {movie && (
-          <div className="bg-gradient-to-r from-brand-gray to-brand-dark rounded-2xl p-6 border border-brand-dark/40 shadow-2xl mb-8">
-            <div className="flex gap-6">
+          <div className="bg-gradient-to-r from-brand-gray to-brand-dark rounded-2xl p-4 sm:p-6 border border-brand-dark/40 shadow-2xl mb-6 sm:mb-8">
+            <div className="flex gap-4 sm:gap-6">
               <div className="flex-shrink-0">
                 <img
                   src={movie.posterUrl || '/placeholder-movie.jpg'}
@@ -1035,8 +1035,8 @@ const LiveSeatLayoutPage: React.FC = () => {
                 />
               </div>
               <div className="flex-1">
-                <h2 className="text-2xl font-bold text-white mb-2">{movie.title}</h2>
-                <div className="flex flex-wrap gap-4 text-sm text-brand-light-gray mb-3">
+                <h2 className="text-lg sm:text-2xl font-bold text-white mb-2">{movie.title}</h2>
+                <div className="flex flex-wrap gap-3 sm:gap-4 text-xs sm:text-sm text-brand-light-gray mb-3">
                   <span>🎭 {movie.genre}</span>
                   <span>🌍 {movie.language}</span>
                   <span>⏱️ {movie.duration}</span>
@@ -1050,20 +1050,20 @@ const LiveSeatLayoutPage: React.FC = () => {
         )}
 
         {/* Live Seat Layout */}
-        <div className="bg-gradient-to-br from-brand-gray to-brand-dark rounded-2xl p-8 border border-brand-dark/40 shadow-2xl">
+        <div className="bg-gradient-to-br from-brand-gray to-brand-dark rounded-2xl p-4 sm:p-8 border border-brand-dark/40 shadow-2xl">
           <div className="flex justify-between items-center mb-6">
             <div className="text-center">
               <p className="text-brand-light-gray">
                 {showtime} • {bookingDate} • {screen?.screenName || `Screen ${screenId}`}
               </p>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-[11px] sm:text-xs text-gray-400 mt-1">
                 Click ticket count to change • Click any seat to auto-select consecutive seats • Maximum {MAX_SEATS} seats
               </p>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowTicketModal(true)}
-                className="bg-brand-red text-white px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2 hover:bg-red-600 transition-colors"
+                className="bg-brand-red text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold text-base sm:text-lg flex items-center gap-2 hover:bg-red-600 transition-colors"
               >
                 <span>🎫</span>
                 <span>{desiredTicketCount} Ticket{desiredTicketCount !== 1 ? 's' : ''}</span>
@@ -1083,7 +1083,7 @@ const LiveSeatLayoutPage: React.FC = () => {
           ) : seatLayoutConfig ? (
             <div className="w-full">
               <div className="flex justify-center">
-                <div className="bg-white/5 rounded-xl p-8 border border-brand-dark/30 w-full max-w-6xl">
+                <div className="bg-white/5 rounded-xl p-4 sm:p-8 border border-brand-dark/30 w-full max-w-screen-md sm:max-w-6xl">
                   {console.log('SeatLayoutBuilder props:', {
                     config: seatLayoutConfig,
                     processedSeats: seatLayout.seats,

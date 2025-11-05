@@ -77,6 +77,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
   selectedSeats = new Set(),
   reservedSeats = new Set()
 }) => {
+  // Tailwind-only responsive scaling handled with utility classes on containers
   const { organizedTiers, legend, classByName } = React.useMemo(() => {
     const legendMap = new Map<string, SeatClassRule>();
     const classByNameMap = new Map<string, SeatClassRule>();
@@ -598,7 +599,9 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
             'repeating-linear-gradient(0deg, rgba(148,163,184,0.08) 0px, rgba(148,163,184,0.08) 1px, transparent 1px, transparent 28px), repeating-linear-gradient(90deg, rgba(148,163,184,0.08) 0px, rgba(148,163,184,0.08) 1px, transparent 1px, transparent 28px)'
         }}
       >
-        <div className="space-y-4">
+        {/* Common horizontal scroll wrapper (scrollbar hidden) */}
+        <div className="overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="inline-block min-w-max space-y-4 w-full">
           {organizedTiers.map((tier, tierIndex) => {
             const header = tier.rule.className;
             const price = `₹${tier.rule.price}`;
@@ -619,13 +622,13 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
 
                 {/* Screen Section */}
                     <div className="flex justify-center">
-                  <div className="relative">
+                  <div className="relative max-w-full transform origin-top max-[420px]:scale-90 max-[360px]:scale-75">
                     {/* Row Labels (Left Side) - Cinema Style - Only show labels for this tier's rows */}
-                    <div className="absolute -left-8 top-0 flex flex-col">
+                    <div className="absolute -left-6 sm:-left-8 top-0 flex flex-col">
                       {tier.rowLabels.map((rowLabel, labelIndex) => (
                         <div 
                           key={rowLabel} 
-                          className="w-6 h-6 flex items-center justify-center text-xs font-bold text-gray-800 dark:text-gray-200"
+                          className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-[10px] sm:text-xs font-bold text-gray-800 dark:text-gray-200"
                           style={{ marginTop: `${labelIndex * 28}px` }}
                         >
                           {rowLabel}
@@ -634,7 +637,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                     </div>
 
                     {/* Seating Grid */}
-                    <div className="ml-2">
+                    <div className="ml-2 inline-block">
                       {slice && Array.isArray(slice) ? slice.map((row, rowIdx) => (
                           <div key={rowIdx} className="flex items-center mb-1">
                             <div className="flex">
@@ -643,7 +646,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                               
                                 if (cell === null) {
                                   // Aisle: reserved gap, not interactive
-                                  return <div key={colIdx} className="w-6 h-6 mx-0.5 opacity-20"></div>;
+                                  return <div key={colIdx} className="w-5 h-5 sm:w-6 sm:h-6 mx-0.5 opacity-20"></div>;
                                 }
                               
                               const ruleColor = tier.rule.color;
@@ -663,7 +666,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                   onDragOver={onDragOver(rowIdx, colIdx)}
                                     onDragLeave={onDragLeave}
                                   onDrop={onDrop(tierIndex, rowIdx, colIdx)}
-                                    className={`w-6 h-6 mx-0.5 rounded relative group`}
+                                    className={`w-5 h-5 sm:w-6 sm:h-6 mx-0.5 rounded relative group`}
                                   >
                                   {/* Hover highlight */}
                                   {isHover && editMode && dragFrom && (
@@ -687,7 +690,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                       })() ? (
                                         <button
                                           onClick={handleCellClickEdit(tierIndex, rowIdx, colIdx, cell.rowLabel, ruleColor)}
-                                          className="w-full h-full rounded border border-dashed text-[9px] text-gray-400 flex items-center justify-center"
+                                          className="w-full h-full rounded border border-dashed text-[8px] sm:text-[9px] text-gray-400 flex items-center justify-center"
                                           style={{ borderColor: `${ruleColor}77`, backgroundColor: 'transparent' }}
                                           title={isActive ? "Add seat here" : "Restore deleted seat"}
                                         >
@@ -713,7 +716,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                           }}
                                           title={cell.tooltip}
                                           disabled={reservedSeats.has(`${cell.rowLabel}-${cell.number}`)}
-                                        className={`w-full h-full rounded border text-[9px] text-gray-200 flex items-center justify-center transition-all duration-200 hover:scale-110 ${
+                                        className={`w-full h-full rounded border text-[8px] sm:text-[9px] text-gray-200 flex items-center justify-center transition-all duration-200 hover:scale-110 ${
                                             isActive === false ? 'opacity-50' : ''
                                         } ${reservedSeats.has(`${cell.rowLabel}-${cell.number}`) ? 'opacity-50 cursor-not-allowed' : ''} ${
                                             selectedSeats.has(`${cell.rowLabel}-${cell.number}`) ? 'ring-2 ring-yellow-400' : ''
@@ -806,6 +809,7 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
           {/* Screen Display */}
           <div className="mt-8 flex justify-center">
             <div className="w-64 h-3 bg-gradient-to-b from-blue-200 to-blue-300 rounded-b-2xl opacity-70"></div>
+          </div>
           </div>
         </div>
       </div>
