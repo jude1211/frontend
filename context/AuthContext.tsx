@@ -4,7 +4,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
   onAuthStateChanged,
   updateProfile,
@@ -220,21 +219,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setAuthError('This app is not authorized to use Firebase Authentication.');
           break;
         default:
-          // Fallback: if COOP/COEP blocks popup close or access, try redirect flow
-          if (
-            authError.message?.toLowerCase().includes('cross-origin-opener-policy') ||
-            authError.message?.toLowerCase().includes('window.close') ||
-            authError.code === 'auth/operation-not-supported-in-this-environment'
-          ) {
-            try {
-              await signInWithRedirect(auth, googleProvider);
-              return false; // Flow continues after redirect
-            } catch (redirectErr: any) {
-              setAuthError(`Google sign-in failed: ${redirectErr.message || 'redirect failed'}`);
-            }
-          } else {
-            setAuthError(`Google sign-in failed: ${authError.message}`);
-          }
+          setAuthError(`Google sign-in failed: ${authError.message}`);
       }
       return false;
     } finally {
