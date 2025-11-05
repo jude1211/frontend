@@ -155,36 +155,15 @@ class ApiService {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         try {
-<<<<<<< HEAD
-=======
-          // Adaptive timeout: longer for uploads, and increase on retries to tolerate cold starts/network
-          const baseTimeoutMs = isFormData ? 60000 : 20000;
-          const timeoutMs = baseTimeoutMs + retryCount * 7000;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
->>>>>>> 06418c496faa4db000526a28cae21874bdd023e4
           const defaultHeaders = this.getAuthHeaders(isFormData);
           const optionHeaders = (options.headers || {}) as HeadersInit;
           // Merge headers so Authorization is preserved while allowing overrides like Content-Type
           const mergedHeaders: HeadersInit = { ...(defaultHeaders as any), ...(optionHeaders as any) };
-<<<<<<< HEAD
           const response = await fetch(`${base}${endpoint}`, {
             ...options,
             headers: mergedHeaders,
             signal: controller.signal
           });
-=======
-          let response: Response;
-          try {
-            response = await fetch(`${base}${endpoint}`, {
-              ...options,
-              headers: mergedHeaders,
-              signal: controller.signal
-            });
-          } finally {
-            clearTimeout(timeoutId);
-          }
->>>>>>> 06418c496faa4db000526a28cae21874bdd023e4
           let data: any = null;
           try {
             data = await response.json();
@@ -217,23 +196,12 @@ class ApiService {
           }
           return data as ApiResponse<T>;
         } catch (err: any) {
-<<<<<<< HEAD
           // Map AbortError to a clearer timeout error
           if (err?.name === 'AbortError') {
             lastError = new Error('Request timed out');
           } else {
             lastError = err;
           }
-=======
-          // If this was an AbortError (likely client-side timeout), allow a limited retry with extended timeout
-          if (err?.name === 'AbortError' && retryCount < 2) {
-            const retryDelay = 500 + retryCount * 500;
-            console.warn(`⏱️ Request timed out after ${timeoutMs}ms. Retrying in ${retryDelay}ms (attempt ${retryCount + 1}/2)`);
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-            return this.tryFetch<T>(endpoint, options, isFormData, useCache, retryCount + 1);
-          }
-          lastError = err;
->>>>>>> 06418c496faa4db000526a28cae21874bdd023e4
           // Try next candidate
           continue;
         } finally {
@@ -798,7 +766,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    });
+    }, false);
   }
 
   async getOfflineBooking(bookingId: string): Promise<ApiResponse<any>> {
@@ -807,7 +775,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    });
+    }, false);
   }
 
   async updateOfflineBookingStatus(bookingId: string, status: string, reason?: string): Promise<ApiResponse<any>> {
@@ -852,15 +820,10 @@ class ApiService {
       },
       body: JSON.stringify(movieData)
     });
-    // Invalidate owner movie lists and general movie listings
     if (result?.success) {
-      try {
-        requestCache.clearPattern('^GET:/movies/theatre-owner/');
-        requestCache.clearPattern('^GET:/movies($|\\?)');
-        requestCache.clearPattern('^GET:/movies/active-with-shows');
-        requestCache.clearPattern('^GET:/movies/now-showing');
-        requestCache.clearPattern('^GET:/movies/coming-soon');
-      } catch {}
+      // Invalidate owner movies and related lists
+      this.clearCachePattern('^GET:/movies/theatre-owner/');
+      this.clearCachePattern('^GET:/movies/');
     }
     return result;
   }
@@ -885,13 +848,9 @@ class ApiService {
       body: JSON.stringify(movieData)
     });
     if (result?.success) {
-      try {
-        requestCache.clearPattern('^GET:/movies/theatre-owner/');
-        requestCache.clearPattern('^GET:/movies($|\\?)');
-        requestCache.clearPattern('^GET:/movies/active-with-shows');
-        requestCache.clearPattern('^GET:/movies/now-showing');
-        requestCache.clearPattern('^GET:/movies/coming-soon');
-      } catch {}
+      this.clearCachePattern('^GET:/movies/theatre-owner/');
+      this.clearCachePattern(`^GET:/movies/${movieId}$`);
+      this.clearCachePattern('^GET:/screens/.*/shows');
     }
     return result;
   }
@@ -905,13 +864,8 @@ class ApiService {
       }
     });
     if (result?.success) {
-      try {
-        requestCache.clearPattern('^GET:/movies/theatre-owner/');
-        requestCache.clearPattern('^GET:/movies($|\\?)');
-        requestCache.clearPattern('^GET:/movies/active-with-shows');
-        requestCache.clearPattern('^GET:/movies/now-showing');
-        requestCache.clearPattern('^GET:/movies/coming-soon');
-      } catch {}
+      this.clearCachePattern('^GET:/movies/theatre-owner/');
+      this.clearCachePattern('^GET:/screens/.*/shows');
     }
     return result;
   }
@@ -919,7 +873,7 @@ class ApiService {
   // Screen Layout APIs
   async saveScreenLayout(screenId: string, layoutData: any): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/screens/${screenId}/layout`, {
+    const result = await this.makeRequest<any>(`/screens/${screenId}/layout`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -927,11 +881,15 @@ class ApiService {
       },
       body: JSON.stringify(layoutData)
     });
+    if (result?.success) {
+      this.clearCachePattern(`^GET:/screens/${screenId}/layout`);
+    }
+    return result;
   }
 
   async updateScreenLayout(screenId: string, layoutData: any): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/screens/${screenId}/layout`, {
+    const result = await this.makeRequest<any>(`/screens/${screenId}/layout`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -939,6 +897,10 @@ class ApiService {
       },
       body: JSON.stringify(layoutData)
     });
+    if (result?.success) {
+      this.clearCachePattern(`^GET:/screens/${screenId}/layout`);
+    }
+    return result;
   }
 
   async getScreenLayout(screenId: string): Promise<ApiResponse<any>> {
@@ -974,13 +936,18 @@ class ApiService {
 
   async syncScreenLayouts(ownerId: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/theatres/owner/${encodeURIComponent(ownerId)}/sync-layouts`, {
+    const result = await this.makeRequest<any>(`/theatres/owner/${encodeURIComponent(ownerId)}/sync-layouts`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     });
+    if (result?.success) {
+      this.clearCachePattern(`^GET:/theatres/owner/${ownerId}/screens`);
+      this.clearCachePattern('^GET:/screens/.*/layout');
+    }
+    return result;
   }
 
   async addOwnerScreen(ownerId: string, payload: { name?: string; type?: string }): Promise<ApiResponse<{ screenCount: number; screens: any[] }>> {
@@ -994,9 +961,7 @@ class ApiService {
       body: JSON.stringify(payload || {})
     });
     if (result?.success) {
-      try {
-        requestCache.clearPattern('^GET:/theatres/owner/.*/screens');
-      } catch {}
+      this.clearCachePattern(`^GET:/theatres/owner/${ownerId}/screens`);
     }
     return result;
   }
@@ -1011,9 +976,8 @@ class ApiService {
       }
     });
     if (result?.success) {
-      try {
-        requestCache.clearPattern('^GET:/theatres/owner/.*/screens');
-      } catch {}
+      this.clearCachePattern(`^GET:/theatres/owner/${ownerId}/screens`);
+      this.clearCachePattern(`^GET:/screens/${screenId}/shows`);
     }
     return result;
   }
@@ -1035,9 +999,8 @@ class ApiService {
       body: JSON.stringify(payload || {})
     });
     if (result?.success) {
-      try {
-        requestCache.clearPattern('^GET:/theatres/owner/.*/screens');
-      } catch {}
+      this.clearCachePattern(`^GET:/theatres/owner/${ownerId}/screens`);
+      this.clearCachePattern(`^GET:/screens/${screenNumber}/shows`);
     }
     return result;
   }
@@ -1055,7 +1018,7 @@ class ApiService {
 
   async saveScreenShows(screenId: string, movieId: string, showtimes: string[], bookingDate?: string, maxDays?: number): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows`, {
+    const result = await this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1063,32 +1026,44 @@ class ApiService {
       },
       body: JSON.stringify({ movieId, showtimes, bookingDate, maxDays })
     });
+    if (result?.success) {
+      this.clearCachePattern(`^GET:/screens/${screenId}/shows`);
+    }
+    return result;
   }
 
   async deleteScreenShow(screenId: string, showId: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows/${encodeURIComponent(showId)}`, {
+    const result = await this.makeRequest<any>(`/screens/${encodeURIComponent(screenId)}/shows/${encodeURIComponent(showId)}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
+    if (result?.success) {
+      this.clearCachePattern(`^GET:/screens/${screenId}/shows`);
+    }
+    return result;
   }
 
   async cleanupPastScreenShows(screenId: string): Promise<ApiResponse<{ deletedCount: number }>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<{ deletedCount: number }>(`/screens/${encodeURIComponent(screenId)}/shows/cleanup`, {
+    const result = await this.makeRequest<{ deletedCount: number }>(`/screens/${encodeURIComponent(screenId)}/shows/cleanup`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
+    if (result?.success) {
+      this.clearCachePattern(`^GET:/screens/${screenId}/shows`);
+    }
+    return result;
   }
 
   // Movie advance booking management
   async updateMovieAdvanceBooking(movieId: string, enabled: boolean): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/movies/${encodeURIComponent(movieId)}/advance-booking`, {
+    const result = await this.makeRequest<any>(`/movies/${encodeURIComponent(movieId)}/advance-booking`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1096,6 +1071,10 @@ class ApiService {
       },
       body: JSON.stringify({ enabled })
     });
+    if (result?.success) {
+      this.clearCachePattern('^GET:/movies/theatre-owner/');
+    }
+    return result;
   }
 
   // Show Timings Management APIs
@@ -1105,7 +1084,7 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    });
+    }, false);
   }
 
   async getAvailableTimings(ownerId: string, date: string): Promise<ApiResponse<any>> {
@@ -1114,12 +1093,12 @@ class ApiService {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    });
+    }, false);
   }
 
   async saveWeekdayTimings(ownerId: string, timings: string[]): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekday`, {
+    const result = await this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekday`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1127,11 +1106,16 @@ class ApiService {
       },
       body: JSON.stringify({ timings })
     });
+    if (result?.success) {
+      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}`);
+      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}/available/`);
+    }
+    return result;
   }
 
   async saveWeekendTimings(ownerId: string, timings: string[]): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekend`, {
+    const result = await this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/weekend`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1139,11 +1123,16 @@ class ApiService {
       },
       body: JSON.stringify({ timings })
     });
+    if (result?.success) {
+      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}`);
+      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}/available/`);
+    }
+    return result;
   }
 
   async createSpecialTiming(ownerId: string, timings: string[], specialDate: string, description?: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/special`, {
+    const result = await this.makeRequest<any>(`/show-timings/owner/${encodeURIComponent(ownerId)}/special`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1151,11 +1140,16 @@ class ApiService {
       },
       body: JSON.stringify({ timings, specialDate, description })
     });
+    if (result?.success) {
+      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}`);
+      this.clearCachePattern(`^GET:/show-timings/owner/${ownerId}/available/`);
+    }
+    return result;
   }
 
   async updateSpecialTiming(timingId: string, timings: string[], description?: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
+    const result = await this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1163,16 +1157,26 @@ class ApiService {
       },
       body: JSON.stringify({ timings, description })
     });
+    if (result?.success) {
+      this.clearCachePattern('^GET:/show-timings/owner/');
+      this.clearCachePattern('^GET:/show-timings/owner/.*/available/');
+    }
+    return result;
   }
 
   async deleteSpecialTiming(timingId: string): Promise<ApiResponse<any>> {
     const token = localStorage.getItem('theatreOwnerToken');
-    return this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
+    const result = await this.makeRequest<any>(`/show-timings/special/${encodeURIComponent(timingId)}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
+    if (result?.success) {
+      this.clearCachePattern('^GET:/show-timings/owner/');
+      this.clearCachePattern('^GET:/show-timings/owner/.*/available/');
+    }
+    return result;
   }
 }
 
