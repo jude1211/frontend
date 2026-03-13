@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { apiService } from '../services/api';
 
 export interface TMDBMovie {
   id: number;
@@ -53,16 +54,6 @@ export interface MovieSearchInputProps {
   className?: string;
 }
 
-const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || 'your-tmdb-api-key-here';
-const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-const RAW_BASE = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
-const normalizeApiBase = (base?: string): string => {
-  if (!base) return 'https://backend-bnv.onrender.com/api/v1';
-  const trimmed = base.replace(/\/+$/, '');
-  if (/\/api\/v\d+$/.test(trimmed)) return trimmed;
-  return `${trimmed}/api/v1`;
-};
-const API_BASE = normalizeApiBase(RAW_BASE);
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 
 const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
@@ -76,10 +67,11 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  
+
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Debounced search function
   const searchMovies = useCallback(async (searchQuery: string) => {
@@ -89,36 +81,60 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
       return;
     }
 
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new controller for this request
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        `${API_BASE}/proxy/tmdb?url=${encodeURIComponent(`${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}&page=1&include_adult=false`)}`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`TMDB API error: ${response.status}`);
+      const response = await apiService.searchTMDBMovies(searchQuery, 1, controller.signal);
+
+      // Handle both wrapped ApiResponse format and direct TMDB response
+      let results = [];
+      if (response.success && response.data) {
+        // Wrapped format: { success: true, data: { results: [...] } }
+        results = response.data.results || response.data || [];
+      } else if ((response as any).results) {
+        // Direct TMDB format: { results: [...] }
+        results = (response as any).results;
+      } else if (Array.isArray(response)) {
+        // Direct array format
+        results = response;
       }
 
-      const data = await response.json();
-      setSuggestions(data.results || []);
+      setSuggestions(results);
       setShowSuggestions(true);
       setSelectedIndex(-1);
-    } catch (err) {
+    } catch (err: any) {
+      // Ignore abort errors
+      if (err.name === 'AbortError' || err.message === 'Aborted') {
+        console.log('Search aborted for:', searchQuery);
+        return;
+      }
+
       console.error('Movie search error:', err);
-      setError('Failed to search movies. Please try again.');
+      setError(err.message || 'Failed to search movies. Please try again.');
       setSuggestions([]);
       setShowSuggestions(false);
     } finally {
-      setIsLoading(false);
+      // Only clear loading if this is the active request
+      if (abortControllerRef.current === controller) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   // Debounced input handler
   const handleInputChange = useCallback((value: string) => {
     setQuery(value);
-    
+
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
     }
@@ -131,16 +147,21 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
   // Fetch detailed movie information
   const fetchMovieDetails = async (movieId: number): Promise<TMDBMovieDetails | null> => {
     try {
-      const response = await fetch(
-        `${API_BASE}/proxy/tmdb?url=${encodeURIComponent(`${TMDB_BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=credits,videos`)}`
-      );
-      if (!response.ok) {
-        throw new Error(`TMDB API error: ${response.status}`);
+      const response = await apiService.getTMDBMovieDetails(movieId);
+
+      // Handle both wrapped ApiResponse format and direct TMDB response
+      if (response.success && response.data) {
+        // Wrapped format: { success: true, data: {...} }
+        return response.data as TMDBMovieDetails;
+      } else if ((response as any).id) {
+        // Direct TMDB format: { id: ..., title: ..., ... }
+        return response as any as TMDBMovieDetails;
       }
-      return await response.json();
-    } catch (err) {
+
+      throw new Error('Invalid response format');
+    } catch (err: any) {
       console.error('Movie details error:', err);
-      setError('Failed to fetch movie details. Please try again.');
+      setError(err.message || 'Failed to fetch movie details. Please try again.');
       return null;
     }
   };
@@ -150,7 +171,7 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
     setQuery(movie.title);
     setShowSuggestions(false);
     setSelectedIndex(-1);
-    
+
     const details = await fetchMovieDetails(movie.id);
     if (details) {
       onMovieSelect(details);
@@ -164,7 +185,7 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex(prev => 
+        setSelectedIndex(prev =>
           prev < suggestions.length - 1 ? prev + 1 : prev
         );
         break;
@@ -212,12 +233,6 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
     };
   }, []);
 
-  const formatRuntime = (minutes: number): string => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}h ${mins}m`;
-  };
-
   const getLanguageName = (code: string): string => {
     const languages: Record<string, string> = {
       'en': 'English',
@@ -251,7 +266,7 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
           placeholder={placeholder}
           className="w-full px-4 py-3 bg-brand-dark text-white rounded-xl border border-brand-dark/50 focus:outline-none focus:border-brand-red focus:ring-2 focus:ring-brand-red/20 transition-all duration-200"
         />
-        
+
         {isLoading && (
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-brand-red"></div>
@@ -275,11 +290,10 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
             <div
               key={movie.id}
               onClick={() => handleMovieSelect(movie)}
-              className={`p-4 cursor-pointer border-b border-brand-dark/30 last:border-b-0 transition-colors duration-200 ${
-                index === selectedIndex
-                  ? 'bg-brand-red/20 border-brand-red/30'
-                  : 'hover:bg-brand-dark/50'
-              }`}
+              className={`p-4 cursor-pointer border-b border-brand-dark/30 last:border-b-0 transition-colors duration-200 ${index === selectedIndex
+                ? 'bg-brand-red/20 border-brand-red/30'
+                : 'hover:bg-brand-dark/50'
+                }`}
             >
               <div className="flex items-center space-x-4">
                 {movie.poster_path ? (
@@ -296,7 +310,7 @@ const MovieSearchInput: React.FC<MovieSearchInputProps> = ({
                     <i className="fas fa-film text-brand-light-gray"></i>
                   </div>
                 )}
-                
+
                 <div className="flex-1 min-w-0">
                   <h4 className="text-white font-semibold truncate">{movie.title}</h4>
                   <p className="text-brand-light-gray text-sm truncate">

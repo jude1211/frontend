@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MovieCard from '../components/MovieCard';
-import { filterValidScreensWithRunningDates } from '../utils/showtimeValidation';
+import BirthdayWishes from '../components/BirthdayWishes';
 import { useAppContext } from '../context/AppContext';
 import { apiService } from '../services/api';
 
@@ -12,7 +11,6 @@ const HomePage: React.FC = () => {
   const { city } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
   const [movies, setMovies] = useState<any[]>([]);
-  const [allMovies, setAllMovies] = useState<any[]>([]);
   const [comingSoon, setComingSoon] = useState<any[]>([]);
 
   // Check for theatre owner authentication and redirect
@@ -39,7 +37,6 @@ const HomePage: React.FC = () => {
         const res = await apiService.getActiveMoviesWithShows();
         if (!res.success || !Array.isArray(res.data)) {
           setMovies([]);
-          setAllMovies([]);
           return;
         }
 
@@ -63,11 +60,9 @@ const HomePage: React.FC = () => {
         }).filter((m: any) => m._hasAssignedShows);
 
         setMovies(normalized);
-        setAllMovies(normalized);
       } catch (error) {
         console.error('Error fetching movies with shows:', error);
         setMovies([]);
-        setAllMovies([]);
       } finally {
         setIsLoading(false);
       }
@@ -97,7 +92,7 @@ const HomePage: React.FC = () => {
     <div className="space-y-8 sm:space-y-12 md:space-y-16">
       {/* Hero Section - Enhanced Banner Carousel */}
       <div className="relative w-full h-64 sm:h-80 md:h-[400px] lg:h-[500px] rounded-xl md:rounded-2xl overflow-hidden shadow-2xl">
-          {movies.slice(0, 5).map((movie, index) => (
+        {movies.slice(0, 5).map((movie, index) => (
           <div
             key={movie._id || index}
             className={`absolute inset-0 transition-all duration-1000 ${index === currentBanner ? 'opacity-100 scale-100' : 'opacity-0 scale-105'}`}
@@ -126,13 +121,13 @@ const HomePage: React.FC = () => {
           </div>
         ))}
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex space-x-3">
-            {movies.slice(0, 5).map((_: any, index: number) => (
-            <button 
-              key={index} 
-              onClick={() => setCurrentBanner(index)} 
+          {movies.slice(0, 5).map((_: any, index: number) => (
+            <button
+              key={index}
+              onClick={() => setCurrentBanner(index)}
               className={`w-4 h-4 rounded-full transition-all duration-300 ${index === currentBanner ? 'bg-white scale-125' : 'bg-white/50 hover:bg-white/75'}`}
             ></button>
-            ))}
+          ))}
         </div>
       </div>
 
@@ -163,7 +158,7 @@ const HomePage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {movies.filter(movie => movie._hasAssignedShows).map((movie) => (
+            {movies.filter(movie => movie._hasAssignedShows).map((movie) => (
               <div
                 key={movie._id}
                 className="group cursor-pointer"
@@ -179,7 +174,10 @@ const HomePage: React.FC = () => {
                   status: movie.status,
                   runtimeDays: movie.runtimeDays,
                   releaseDate: movie.releaseDate,
-                  advanceBookingEnabled: movie.advanceBookingEnabled
+                  advanceBookingEnabled: movie.advanceBookingEnabled,
+                  bannerUrl: '',
+                  description: '',
+                  trailerUrl: ''
                 }} />
               </div>
             ))}
@@ -215,83 +213,17 @@ const HomePage: React.FC = () => {
               status: movie.status,
               runtimeDays: movie.runtimeDays,
               releaseDate: movie.releaseDate,
-              advanceBookingEnabled: movie.advanceBookingEnabled
+              advanceBookingEnabled: movie.advanceBookingEnabled,
+              bannerUrl: '',
+              description: '',
+              trailerUrl: ''
             }} />
           ))}
         </div>
       </div>
 
-      {/* Featured Events Section - Enhanced */}
       <div className="animate-fade-in-up">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
-          <div>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Featured Events</h2>
-            <p className="text-gray-400 text-sm sm:text-base">Live shows, concerts & cultural events</p>
-          </div>
-          <button className="text-brand-red hover:text-red-400 transition-colors font-semibold text-sm sm:text-base whitespace-nowrap">
-            View All →
-          </button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {[
-            { 
-              title: "Bollywood Night", 
-              type: "Live Music", 
-              date: "Dec 20", 
-              time: "8:00 PM",
-              price: "₹999",
-              image: "https://picsum.photos/seed/bollywood/400/250",
-              venue: "Mumbai Arena"
-            },
-            { 
-              title: "Comedy Night", 
-              type: "Stand-up", 
-              date: "Dec 25", 
-              time: "7:30 PM",
-              price: "₹499",
-              image: "https://picsum.photos/seed/comedy/400/250",
-              venue: "Laugh Factory"
-            },
-            { 
-              title: "Dance Festival", 
-              type: "Cultural", 
-              date: "Jan 5", 
-              time: "6:00 PM",
-              price: "₹799",
-              image: "https://picsum.photos/seed/dance/400/250",
-              venue: "Cultural Center"
-            }
-          ].map((event, index) => (
-            <div key={index} className="bg-gradient-to-br from-brand-gray to-brand-dark rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 group">
-              <div className="relative">
-                <img src={event.image} alt={event.title} className="w-full h-56 object-cover group-hover:scale-105 transition-transform duration-500" />
-                <div className="absolute top-4 right-4">
-                  <div className="bg-brand-red text-white px-3 py-1 rounded-full text-sm font-bold">
-                    {event.price}
-                  </div>
-                </div>
-              </div>
-              <div className="p-6">
-                <h3 className="font-bold text-white text-xl mb-2 group-hover:text-brand-red transition-colors">{event.title}</h3>
-                <p className="text-gray-400 text-sm mb-3">{event.type}</p>
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-brand-red">📅</span>
-                    <span className="text-white">{event.date}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-brand-red">🕒</span>
-                    <span className="text-white">{event.time}</span>
-                  </div>
-                </div>
-                <p className="text-gray-400 text-sm mt-2">{event.venue}</p>
-                <button className="w-full mt-4 bg-brand-red text-white py-2 rounded-lg font-semibold hover:bg-red-600 transition-colors">
-                  Book Tickets
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <BirthdayWishes />
       </div>
 
       {/* List Your Show Section */}
@@ -309,7 +241,7 @@ const HomePage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <button 
+            <button
               onClick={handleContactClick}
               className="bg-gradient-to-r from-brand-red to-red-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg md:rounded-xl text-sm sm:text-base font-bold hover:from-red-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 shadow-lg w-full md:w-auto"
             >

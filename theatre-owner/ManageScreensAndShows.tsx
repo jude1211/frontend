@@ -50,13 +50,13 @@ const ManageScreensAndShows: React.FC = () => {
           // Fallbacks
           const ownerLocal = localStorage.getItem('theatreOwnerData');
           if (ownerLocal) {
-            try { resolvedOwnerId = JSON.parse(ownerLocal)?._id || JSON.parse(ownerLocal)?.id; } catch {}
+            try { resolvedOwnerId = JSON.parse(ownerLocal)?._id || JSON.parse(ownerLocal)?.id; } catch { }
           }
         }
         if (!resolvedOwnerId) {
           const user = localStorage.getItem('user');
           if (user) {
-            try { resolvedOwnerId = JSON.parse(user)?._id || JSON.parse(user)?.id; } catch {}
+            try { resolvedOwnerId = JSON.parse(user)?._id || JSON.parse(user)?.id; } catch { }
           }
         }
         if (!resolvedOwnerId) return;
@@ -68,20 +68,20 @@ const ManageScreensAndShows: React.FC = () => {
           apiService.getTheatreOwnerMovies(resolvedOwnerId as string),
           apiService.getOwnerScreens(resolvedOwnerId as string)
         ]);
-        
+
         if (moviesRes.success) {
           setOwnerMovies(moviesRes.data || []);
         } else {
           console.error('Failed to load movies:', moviesRes.error);
         }
-        
+
         if (screensRes.success) {
           setOwnerScreens(screensRes.data?.screens || []);
         } else {
           setScreensError(screensRes.error || 'Failed to load screens');
           console.error('Failed to load screens:', screensRes.error);
         }
-        
+
         // Load available timings for today
         loadAvailableTimings(resolvedOwnerId as string, selectedDate);
       } catch (error) {
@@ -122,10 +122,10 @@ const ManageScreensAndShows: React.FC = () => {
       if (!selectedScreenId) return setShows([]);
       try {
         // Cleanup past shows for this screen, then fetch all current/future shows
-        try { await apiService.cleanupPastScreenShows(selectedScreenId); } catch {}
+        try { await apiService.cleanupPastScreenShows(selectedScreenId); } catch { }
         const res = await apiService.getScreenShows(selectedScreenId);
         if (res.success) setShows(res.data || []);
-      } catch {}
+      } catch { }
     };
     loadShows();
   }, [selectedScreenId]);
@@ -151,11 +151,11 @@ const ManageScreensAndShows: React.FC = () => {
     const today = new Date();
     const releaseDate = movie.releaseDate ? new Date(movie.releaseDate) : null;
     const firstShowDate = movie.firstShowDate ? new Date(movie.firstShowDate) : null;
-    
+
     let status = 'Coming Soon';
     let runtimeDays = 0;
     let isAdvanceBooking = false;
-    
+
     if (releaseDate && releaseDate <= today) {
       status = 'Now Showing';
       if (firstShowDate) {
@@ -166,11 +166,11 @@ const ManageScreensAndShows: React.FC = () => {
     } else if (releaseDate && releaseDate > today && movie.advanceBookingEnabled) {
       isAdvanceBooking = true;
     }
-    
+
     return { status, runtimeDays, isAdvanceBooking };
   };
 
-  const filteredMovies = ownerMovies.filter(movie => {
+  const filteredMovies = ownerMovies.filter((movie: any) => {
     if (movieFilter === 'all') return true;
     const { status } = calculateMovieStatus(movie);
     if (movieFilter === 'now_showing') return status === 'Now Showing';
@@ -182,7 +182,7 @@ const ManageScreensAndShows: React.FC = () => {
   }, []);
 
   // Derived chips preview and time validation helper
-  const plannedChips = showtimesInput.split(',').map(s => s.trim()).filter(Boolean);
+  const plannedChips = showtimesInput.split(',').map((s: string) => s.trim()).filter(Boolean);
 
   const loadAvailableTimings = async (ownerId: string, date: string) => {
     try {
@@ -203,20 +203,20 @@ const ManageScreensAndShows: React.FC = () => {
       if (!resolvedOwnerId) {
         const ownerLocal = localStorage.getItem('theatreOwnerData');
         if (ownerLocal) {
-          try { resolvedOwnerId = JSON.parse(ownerLocal)?._id || JSON.parse(ownerLocal)?.id; } catch {}
+          try { resolvedOwnerId = JSON.parse(ownerLocal)?._id || JSON.parse(ownerLocal)?.id; } catch { }
         }
       }
       if (!resolvedOwnerId) {
         const user = localStorage.getItem('user');
         if (user) {
-          try { resolvedOwnerId = JSON.parse(user)?._id || JSON.parse(user)?.id; } catch {}
+          try { resolvedOwnerId = JSON.parse(user)?._id || JSON.parse(user)?.id; } catch { }
         }
       }
       if (!resolvedOwnerId) return;
 
       setLoadingScreens(true);
       setScreensError(null);
-      
+
       const screensRes = await apiService.getOwnerScreens(resolvedOwnerId as string);
       if (screensRes.success) {
         setOwnerScreens(screensRes.data?.screens || []);
@@ -306,21 +306,21 @@ const ManageScreensAndShows: React.FC = () => {
     const intervals = times.map(tok => {
       const start = parseTimeToMinutes(tok);
       return { start, end: start + durationMin, label: tok };
-    }).sort((a,b)=> a.start - b.start);
+    }).sort((a, b) => a.start - b.start);
     for (const it of intervals) {
       if (isNaN(it.start)) return `Invalid time detected: ${it.label}`;
-      if (it.end > 24*60) return `Showtime ${it.label} exceeds the day given duration (${durationMin}m)`;
+      if (it.end > 24 * 60) return `Showtime ${it.label} exceeds the day given duration (${durationMin}m)`;
     }
-    for (let i=1;i<intervals.length;i++) {
-      if (intervals[i].start < intervals[i-1].end) {
-        return `Overlapping times within plan: ${intervals[i-1].label} and ${intervals[i].label}`;
+    for (let i = 1; i < intervals.length; i++) {
+      if (intervals[i].start < intervals[i - 1].end) {
+        return `Overlapping times within plan: ${intervals[i - 1].label} and ${intervals[i].label}`;
       }
     }
     return null;
   };
 
-  const getExistingShowIntervals = (list: any[]): Array<{ start:number; end:number; label:string; showId:string }> => {
-    const result: Array<{ start:number; end:number; label:string; showId:string }> = [];
+  const getExistingShowIntervals = (list: any[]): Array<{ start: number; end: number; label: string; showId: string }> => {
+    const result: Array<{ start: number; end: number; label: string; showId: string }> = [];
     for (const sh of list || []) {
       const durRaw = (sh.movieId?.duration ?? sh.movieId?.runtime ?? sh.duration ?? sh.runtime ?? null);
       const durMin = parseDurationToMinutes(durRaw) ?? 0;
@@ -335,14 +335,14 @@ const ManageScreensAndShows: React.FC = () => {
     return result;
   };
 
-  const detectOverlapAgainstExisting = (times: string[], durationMin: number, existing: Array<{ start:number; end:number; label:string; showId:string }>, excludeShowId?: string): string | null => {
+  const detectOverlapAgainstExisting = (times: string[], durationMin: number, existing: Array<{ start: number; end: number; label: string; showId: string }>, excludeShowId?: string): string | null => {
     const plan = times.map(tok => {
       const s = parseTimeToMinutes(tok);
       return { start: s, end: s + durationMin, label: tok };
     });
     for (const p of plan) {
       if (isNaN(p.start)) return `Invalid time detected: ${p.label}`;
-      if (p.end > 24*60) return `Showtime ${p.label} exceeds the day given duration (${durationMin}m)`;
+      if (p.end > 24 * 60) return `Showtime ${p.label} exceeds the day given duration (${durationMin}m)`;
       for (const ex of existing) {
         if (excludeShowId && ex.showId && String(ex.showId) === String(excludeShowId)) continue;
         // overlap if start < other.end and end > other.start
@@ -387,7 +387,7 @@ const ManageScreensAndShows: React.FC = () => {
     return null;
   };
 
-  
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800">
@@ -400,10 +400,10 @@ const ManageScreensAndShows: React.FC = () => {
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
           <div className="mb-4">
             <label className="block text-sm text-gray-400 mb-2">Select Date for Show Assignment</label>
-              <input
+            <input
               type="date"
               value={selectedDate}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setSelectedDate(e.target.value);
                 // Reload timings for the new date
                 const profile = localStorage.getItem('theatreOwnerData');
@@ -413,10 +413,10 @@ const ManageScreensAndShows: React.FC = () => {
                     if (ownerId) {
                       loadAvailableTimings(ownerId, e.target.value);
                     }
-                  } catch {}
+                  } catch { }
                 }
-                  // Ensure booking date starts at the selected assignment date
-                  setBookingDate(e.target.value);
+                // Ensure booking date starts at the selected assignment date
+                setBookingDate(e.target.value);
               }}
               min={new Date().toISOString().split('T')[0]}
               className="w-64 bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2"
@@ -427,19 +427,19 @@ const ManageScreensAndShows: React.FC = () => {
               <label className="block text-sm text-gray-400 mb-1">Movie</label>
               <div className="mb-2">
                 <div className="flex gap-2 text-xs">
-                  <button 
+                  <button
                     onClick={() => setMovieFilter('all')}
                     className={`px-2 py-1 rounded ${movieFilter === 'all' ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300'}`}
                   >
                     All
                   </button>
-                  <button 
+                  <button
                     onClick={() => setMovieFilter('now_showing')}
                     className={`px-2 py-1 rounded ${movieFilter === 'now_showing' ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300'}`}
                   >
                     Now Showing
                   </button>
-                  <button 
+                  <button
                     onClick={() => setMovieFilter('coming_soon')}
                     className={`px-2 py-1 rounded ${movieFilter === 'coming_soon' ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300'}`}
                   >
@@ -447,13 +447,13 @@ const ManageScreensAndShows: React.FC = () => {
                   </button>
                 </div>
               </div>
-              <select value={selectedMovieId} onChange={(e)=>setSelectedMovieId(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2">
+              <select value={selectedMovieId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedMovieId(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2">
                 <option value="">Select a movie</option>
-                {filteredMovies.map((m:any)=> {
+                {filteredMovies.map((m: any) => {
                   const { status, runtimeDays, isAdvanceBooking } = calculateMovieStatus(m);
-                  const statusText = status === 'Now Showing' ? `(Now Showing - Day ${runtimeDays})` : 
-                                   isAdvanceBooking ? '(Coming Soon - Advance Booking)' : 
-                                   '(Coming Soon)';
+                  const statusText = status === 'Now Showing' ? `(Now Showing - Day ${runtimeDays})` :
+                    isAdvanceBooking ? '(Coming Soon - Advance Booking)' :
+                      '(Coming Soon)';
                   return (
                     <option key={m._id} value={m._id}>
                       {m.title} {statusText}
@@ -471,14 +471,14 @@ const ManageScreensAndShows: React.FC = () => {
                 <label className="block text-xs text-gray-400 mb-1">Duration</label>
                 <input
                   value={duration}
-                  onChange={(e)=>setDuration(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDuration(e.target.value)}
                   placeholder={selectedMovieId ? 'Not Available' : ''}
                   disabled={!selectedMovieId}
                   className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2 disabled:opacity-60"
                 />
               </div>
               {selectedMovieId && (() => {
-                const selectedMovie = ownerMovies.find(m => m._id === selectedMovieId);
+                const selectedMovie = ownerMovies.find((m: any) => m._id === selectedMovieId);
                 if (selectedMovie && selectedMovie.releaseDate && new Date(selectedMovie.releaseDate) > new Date()) {
                   return (
                     <div className="mt-3">
@@ -486,13 +486,13 @@ const ManageScreensAndShows: React.FC = () => {
                         <input
                           type="checkbox"
                           checked={selectedMovie.advanceBookingEnabled || false}
-                          onChange={async (e) => {
+                          onChange={async (e: React.ChangeEvent<HTMLInputElement>) => {
                             try {
                               const res = await apiService.updateMovieAdvanceBooking(selectedMovieId, e.target.checked);
                               if (res.success) {
                                 // Update local state
-                                setOwnerMovies(prev => prev.map(m => 
-                                  m._id === selectedMovieId 
+                                setOwnerMovies((prev: any) => prev.map((m: any) =>
+                                  m._id === selectedMovieId
                                     ? { ...m, advanceBookingEnabled: e.target.checked }
                                     : m
                                 ));
@@ -526,16 +526,16 @@ const ManageScreensAndShows: React.FC = () => {
                   <i className={`fas fa-sync-alt ${loadingScreens ? 'animate-spin' : ''}`}></i>
                 </button>
               </div>
-              <select 
-                value={selectedScreenId} 
-                onChange={(e)=>setSelectedScreenId(e.target.value)} 
+              <select
+                value={selectedScreenId}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedScreenId(e.target.value)}
                 disabled={loadingScreens}
                 className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2 disabled:opacity-60"
               >
                 <option value="">
                   {loadingScreens ? 'Loading screens...' : 'Select a screen'}
                 </option>
-                {ownerScreens.map((s:any)=> (
+                {ownerScreens.map((s: any) => (
                   <option key={s.screenNumber} value={String(s.screenNumber)}>
                     {s.name || `Screen ${s.screenNumber}`}
                     {s.type && s.type !== '2D' && ` (${s.type})`}
@@ -545,8 +545,8 @@ const ManageScreensAndShows: React.FC = () => {
               {screensError && (
                 <div className="text-xs text-red-400 mt-2">
                   {screensError}
-                  <button 
-                    onClick={refreshScreens} 
+                  <button
+                    onClick={refreshScreens}
                     className="text-blue-400 underline ml-1"
                   >
                     Retry
@@ -555,7 +555,7 @@ const ManageScreensAndShows: React.FC = () => {
               )}
               {!loadingScreens && !screensError && ownerScreens.length === 0 && (
                 <div className="text-xs text-gray-400 mt-2">
-                  No screens found. 
+                  No screens found.
                   <a href="#/theatre-owner/screens" className="text-red-400 underline ml-1">Add screens first</a>
                 </div>
               )}
@@ -567,30 +567,30 @@ const ManageScreensAndShows: React.FC = () => {
                 value={bookingDate}
                 min={selectedDate}
                 max={addDaysIso(selectedDate, Math.max(0, (runningDays || 1) - 1))}
-                onChange={(e)=> setBookingDate(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBookingDate(e.target.value)}
                 className="w-full bg-black/40 border border-gray-700 text-white rounded-lg px-3 py-2"
               />
               <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
                 <span>Running days:</span>
-                <input 
-                  type="number" 
-                  min={1} 
-                  max={14} 
+                <input
+                  type="number"
+                  min={1}
+                  max={14}
                   value={runningDays}
-                  onChange={(e)=> {
-                    const v = Math.min(14, Math.max(1, parseInt(e.target.value||'1',10)));
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    const v = Math.min(14, Math.max(1, parseInt(e.target.value || '1', 10)));
                     setRunningDays(v);
-                  }} 
-                  className="w-16 bg-black/40 border border-gray-700 text-white rounded px-2 py-1" 
+                  }}
+                  className="w-16 bg-black/40 border border-gray-700 text-white rounded px-2 py-1"
                 />
-                <span>(max date auto-sets to today + {(runningDays||1)-1} day(s))</span>
+                <span>(max date auto-sets to today + {(runningDays || 1) - 1} day(s))</span>
               </div>
               {selectedMovieId && (() => {
-                const selectedMovie = ownerMovies.find(m => m._id === selectedMovieId);
+                const selectedMovie = ownerMovies.find((m: any) => m._id === selectedMovieId);
                 if (selectedMovie) {
                   const { status, isAdvanceBooking } = calculateMovieStatus(selectedMovie);
                   const isAdvanceBookingDate = selectedMovie.releaseDate && new Date(bookingDate) < new Date(selectedMovie.releaseDate);
-                  
+
                   return (
                     <div className="mt-2 space-y-1">
                       {status === 'Coming Soon' && isAdvanceBooking && isAdvanceBookingDate && (
@@ -618,7 +618,7 @@ const ManageScreensAndShows: React.FC = () => {
                   <div className="space-y-2">
                     <div className="text-xs text-gray-400">Available timings for {selectedDate}:</div>
                     <div className="flex flex-wrap gap-1">
-                      {availableTimings.map((timing, idx) => (
+                      {availableTimings.map((timing: string, idx: number) => (
                         <button
                           key={idx}
                           onClick={() => {
@@ -632,14 +632,14 @@ const ManageScreensAndShows: React.FC = () => {
                       ))}
                     </div>
                     <div className="text-xs text-gray-500">
-                      Click timings to add them, or type manually. 
+                      Click timings to add them, or type manually.
                       <a href="#/theatre-owner/show-timings" className="text-blue-400 underline ml-1">Manage timings</a>
                     </div>
                   </div>
                 )}
                 {availableTimings.length === 0 && (
                   <div className="text-xs text-gray-500">
-                    No saved timings found. 
+                    No saved timings found.
                     <a href="#/theatre-owner/show-timings" className="text-blue-400 underline ml-1">Set up show timings first</a>
                   </div>
                 )}
@@ -647,12 +647,12 @@ const ManageScreensAndShows: React.FC = () => {
               {showtimeError && <div className="text-xs text-red-400 mt-1">{showtimeError}</div>}
               {plannedChips.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {plannedChips.map((t, idx) => (
+                  {plannedChips.map((t: string, idx: number) => (
                     <span key={`${t}-${idx}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-emerald-500/15 text-emerald-200 border border-emerald-400/30">
                       <i className="fas fa-clock"></i>{t}
                       <button
                         onClick={() => {
-                          const updatedChips = plannedChips.filter((_, i) => i !== idx);
+                          const updatedChips = plannedChips.filter((_: string, i: number) => i !== idx);
                           setShowtimesInput(updatedChips.join(', '));
                         }}
                         className="ml-1 hover:bg-emerald-400/20 rounded-full p-0.5 transition-colors"
@@ -666,12 +666,12 @@ const ManageScreensAndShows: React.FC = () => {
               )}
             </div>
           </div>
-          <button onClick={async ()=>{
+          <button onClick={async () => {
             if (!selectedMovieId || !selectedScreenId) { openPopup('Please select both a movie and a screen.', 'Missing selection'); return; }
             const times = parseAndValidateShowtimes(showtimesInput);
             if (times === null) return; // invalid format
             // Determine duration from selected movie
-            const selectedMovie = ownerMovies.find((m:any)=> String(m._id) === String(selectedMovieId));
+            const selectedMovie = ownerMovies.find((m: any) => String(m._id) === String(selectedMovieId));
             const durationMin = parseDurationToMinutes(selectedMovie?.duration ?? selectedMovie?.runtime ?? duration);
             if (!durationMin || durationMin <= 0) {
               setShowtimeError('Movie duration not available. Please enter duration or update the movie.');
@@ -685,10 +685,10 @@ const ManageScreensAndShows: React.FC = () => {
             const extErr = detectOverlapAgainstExisting(times, durationMin, existing) || hasExactDuplicateAgainstExisting(times, shows);
             if (extErr) { setShowtimeError(extErr); return; }
             const res = await apiService.saveScreenShows(
-              selectedScreenId, 
-              selectedMovieId, 
-              times, 
-              bookingDate || getTodayIso(), 
+              selectedScreenId,
+              selectedMovieId,
+              times,
+              bookingDate || getTodayIso(),
               Math.max(0, (runningDays || 1) - 1)
             );
             if (res.success) {
@@ -697,7 +697,7 @@ const ManageScreensAndShows: React.FC = () => {
                 // Refresh ALL shows for the screen after successful assignment
                 const list = await apiService.getScreenShows(selectedScreenId);
                 if (list.success) setShows(list.data || []);
-              } catch {}
+              } catch { }
             } else {
               openPopup(res.error || 'Failed to save shows', 'Save failed');
             }
@@ -710,9 +710,9 @@ const ManageScreensAndShows: React.FC = () => {
               Existing Shows {selectedScreenId && `- Screen ${selectedScreenId}`}
             </h2>
             <div className="flex gap-2">
-              <select 
-                value={showtimeFilter} 
-                onChange={(e) => setShowtimeFilter(e.target.value as 'all' | 'valid' | 'past')}
+              <select
+                value={showtimeFilter}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setShowtimeFilter(e.target.value as 'all' | 'valid' | 'past')}
                 className="bg-gray-700 text-white rounded px-3 py-1 text-sm border border-gray-600"
               >
                 <option value="all">All Showtimes</option>
@@ -727,255 +727,296 @@ const ManageScreensAndShows: React.FC = () => {
             </p>
           )}
           <div className="space-y-3">
-            {shows
-              .filter((sh: any) => {
-                if (showtimeFilter === 'all') return true;
-                
-                const hasValidShowtimes = (sh.showtimes || []).some((showtime: string) => {
-                  const validation = validateShowtime(sh.bookingDate, showtime);
-                  return validation.isValid;
-                });
-                
-                const hasPastShowtimes = (sh.showtimes || []).some((showtime: string) => {
-                  const validation = validateShowtime(sh.bookingDate, showtime);
-                  return !validation.isValid && validation.isPast;
-                });
-                
-                if (showtimeFilter === 'valid') return hasValidShowtimes;
-                if (showtimeFilter === 'past') return hasPastShowtimes;
-                
-                return true;
+            {Object.values(
+              shows.reduce((groups: any, show: any) => {
+                // Filter first
+                if (showtimeFilter !== 'all') {
+                  const hasValidShowtimes = (show.showtimes || []).some((showtime: string) => {
+                    const validation = validateShowtime(show.bookingDate, showtime);
+                    return validation.isValid;
+                  });
+                  const hasPastShowtimes = (show.showtimes || []).some((showtime: string) => {
+                    const validation = validateShowtime(show.bookingDate, showtime);
+                    return !validation.isValid && validation.isPast;
+                  });
+                  if (showtimeFilter === 'valid' && !hasValidShowtimes) return groups;
+                  if (showtimeFilter === 'past' && !hasPastShowtimes) return groups;
+                }
+
+                // Grouping key: movieId + screenId + sorted_showtimes
+                const movieId = (typeof show.movieId === 'string') ? show.movieId : (show.movieId?._id || show.movieId?.id);
+                const screenId = show.screenId;
+                const showtimesKey = (show.showtimes || []).slice().sort().join('|');
+                const key = `${movieId}_${screenId}_${showtimesKey}`;
+
+                if (!groups[key]) {
+                  groups[key] = {
+                    ...show,
+                    groupResult: {
+                      ids: [show._id],
+                      dates: [show.bookingDate],
+                      showtimes: show.showtimes
+                    }
+                  };
+                } else {
+                  groups[key].groupResult.ids.push(show._id);
+                  groups[key].groupResult.dates.push(show.bookingDate);
+                }
+                return groups;
+              }, {})
+            )
+              .sort((a: any, b: any) => {
+                // Sort by earliest date in group
+                const dateA = a.groupResult.dates.sort()[0];
+                const dateB = b.groupResult.dates.sort()[0];
+                return new Date(dateB).getTime() - new Date(dateA).getTime();
               })
-              .map((sh:any)=> (
-              <div key={sh._id} className="flex items-start justify-between bg-black/30 border border-gray-700 rounded-lg px-4 py-3">
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="h-12 w-9 rounded overflow-hidden bg-gray-700 flex items-center justify-center flex-shrink-0">
-                    {sh.movieId?.posterUrl ? (
-                      <img src={sh.movieId.posterUrl} alt={sh.movieId?.title || 'poster'} className="h-full w-full object-cover" />
-                    ) : (
-                      <i className="fas fa-film text-gray-400"></i>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    {editingId === sh._id ? (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-xs text-gray-400 mb-1">Movie</label>
-                          <select value={editMovieId} onChange={(e)=>setEditMovieId(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded px-2 py-1">
-                            {ownerMovies.map((m:any)=> (
-                              <option key={m._id} value={m._id}>{m.title}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-400 mb-1">Screen</label>
-                          <select value={editScreenId} onChange={(e)=>setEditScreenId(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded px-2 py-1">
-                            <option value="">Select screen</option>
-                            {ownerScreens.map((s:any)=> (
-                              <option key={s.screenNumber} value={String(s.screenNumber)}>
-                                {s.name || `Screen ${s.screenNumber}`}
-                                {s.type && s.type !== '2D' && ` (${s.type})`}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-400 mb-1">Showtimes</label>
-                          <input value={editShowtimesInput} onChange={(e)=>setEditShowtimesInput(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded px-2 py-1" placeholder="e.g. 10:00 AM, 1:30 PM" />
-                        </div>
-                        {showtimeError && (
-                          <div className="md:col-span-3 text-xs text-red-400">{showtimeError}</div>
+              .map((sh: any) => {
+                // Derive display properties from the first item (sh is the accumulation base) plus group data
+                const groupIds = sh.groupResult.ids;
+                const groupDates = sh.groupResult.dates.sort();
+                const startDate = groupDates[0];
+                const endDate = groupDates[groupDates.length - 1];
+                const daysCount = groupDates.length;
+
+                return (
+                  <div key={sh._id} className="flex items-start justify-between bg-black/30 border border-gray-700 rounded-lg px-4 py-3">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className="h-12 w-9 rounded overflow-hidden bg-gray-700 flex items-center justify-center flex-shrink-0">
+                        {sh.movieId?.posterUrl ? (
+                          <img src={sh.movieId.posterUrl} alt={sh.movieId?.title || 'poster'} className="h-full w-full object-cover" />
+                        ) : (
+                          <i className="fas fa-film text-gray-400"></i>
                         )}
                       </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2 mb-1">
-                    <div className="text-white font-medium truncate">{sh.movieId?.title || 'Movie'}</div>
-                          {(() => {
-                            const movie = ownerMovies.find(m => m._id === sh.movieId?._id || sh.movieId);
-                            if (movie) {
-                              const { status, isAdvanceBooking } = calculateMovieStatus(movie);
-                              const isAdvanceBookingDate = movie.releaseDate && new Date(sh.bookingDate) < new Date(movie.releaseDate);
-                              
-                              return (
-                                <div className="flex gap-1">
-                                  {status === 'Now Showing' && (
-                                    <span className="bg-red-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                      Now Showing
-                                    </span>
-                                  )}
-                                  {status === 'Coming Soon' && isAdvanceBooking && isAdvanceBookingDate && (
-                                    <span className="bg-green-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                      Advance Booking
-                                    </span>
-                                  )}
-                                  {status === 'Coming Soon' && !isAdvanceBookingDate && (
-                                    <span className="bg-yellow-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                      Coming Soon
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </div>
-                        <div className="mt-1 text-xs text-gray-400 mb-2 space-y-1">
-                          <div>
-                            <i className="fas fa-calendar mr-1"></i>
-                            Booking Date: {sh.bookingDate || 'Not specified'}
-                          </div>
-                          {(() => {
-                            // Show running dates from database if available
-                            if (sh.runningDates && Array.isArray(sh.runningDates) && sh.runningDates.length > 0) {
-                              const sortedDates = [...sh.runningDates].sort();
-                              const startDate = sortedDates[0];
-                              const endDate = sortedDates[sortedDates.length - 1];
-                              const daysCount = sortedDates.length;
-                              
-                              return (
-                                <div>
-                                  <i className="fas fa-clock mr-1"></i>
-                                  Running for {daysCount} day{daysCount !== 1 ? 's' : ''} ({startDate} to {endDate})
-                                </div>
-                              );
-                            }
-                            
-                            // Fallback to calculated runtime days
-                            const movie = ownerMovies.find(m => m._id === sh.movieId?._id || sh.movieId);
-                            if (movie) {
-                              const { status, runtimeDays } = calculateMovieStatus(movie);
-                              if (status === 'Now Showing' && runtimeDays > 0) {
-                                return (
-                                  <div>
-                                    <i className="fas fa-clock mr-1"></i>
-                                    Running for {runtimeDays} day{runtimeDays !== 1 ? 's' : ''}
-                                  </div>
-                                );
-                              }
-                              if (status === 'Coming Soon' && movie.releaseDate) {
-                                return (
-                                  <div>
-                                    <i className="fas fa-star mr-1"></i>
-                                    Releases: {movie.releaseDate}
-                                  </div>
-                                );
-                              }
-                            }
-                            return null;
-                          })()}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                      {(sh.showtimes||[]).map((t:string, idx:number)=> {
-                        const validation = validateShowtime(sh.bookingDate, t);
-                        const status = getShowtimeStatus(sh.bookingDate, t);
-                        return (
-                          <span 
-                            key={`${sh._id}-t-${idx}`} 
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] border ${
-                              validation.isValid 
-                                ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30'
-                                : validation.isPast
-                                ? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
-                                : 'bg-yellow-500/15 text-yellow-200 border-yellow-400/30'
-                            }`}
-                            title={status.tooltip}
-                          >
-                            <i className="fas fa-clock"></i>
-                            {t}
-                            {!validation.isValid && (
-                              <i className={`fas ${validation.isPast ? 'fa-times' : 'fa-exclamation-triangle'} ml-1`}></i>
+                      <div className="min-w-0 flex-1">
+                        {editingId === sh._id ? (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Movie</label>
+                              <select value={editMovieId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditMovieId(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded px-2 py-1">
+                                {ownerMovies.map((m: any) => (
+                                  <option key={m._id} value={m._id}>{m.title}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Screen</label>
+                              <select value={editScreenId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditScreenId(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded px-2 py-1">
+                                <option value="">Select screen</option>
+                                {ownerScreens.map((s: any) => (
+                                  <option key={s.screenNumber} value={String(s.screenNumber)}>
+                                    {s.name || `Screen ${s.screenNumber}`}
+                                    {s.type && s.type !== '2D' && ` (${s.type})`}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Showtimes</label>
+                              <input value={editShowtimesInput} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditShowtimesInput(e.target.value)} className="w-full bg-black/40 border border-gray-700 text-white rounded px-2 py-1" placeholder="e.g. 10:00 AM, 1:30 PM" />
+                            </div>
+                            {showtimeError && (
+                              <div className="md:col-span-3 text-xs text-red-400">{showtimeError}</div>
                             )}
-                          </span>
-                        );
-                      })}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="text-white font-medium truncate">{sh.movieId?.title || 'Movie'}</div>
+                              {(() => {
+                                const movie = ownerMovies.find((m: any) => m._id === sh.movieId?._id || sh.movieId);
+                                if (movie) {
+                                  const { status, isAdvanceBooking } = calculateMovieStatus(movie);
+                                  const isAdvanceBookingDate = movie.releaseDate && new Date(startDate) < new Date(movie.releaseDate);
+
+                                  return (
+                                    <div className="flex gap-1">
+                                      {status === 'Now Showing' && (
+                                        <span className="bg-red-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                          Now Showing
+                                        </span>
+                                      )}
+                                      {status === 'Coming Soon' && isAdvanceBooking && isAdvanceBookingDate && (
+                                        <span className="bg-green-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                          Advance Booking
+                                        </span>
+                                      )}
+                                      {status === 'Coming Soon' && !isAdvanceBookingDate && (
+                                        <span className="bg-yellow-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                          Coming Soon
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
+                            <div className="mt-1 text-xs text-gray-400 mb-2 space-y-1">
+                              <div>
+                                <i className="fas fa-calendar mr-1"></i>
+                                {daysCount === 1 ? (
+                                  <span>Date: {startDate}</span>
+                                ) : (
+                                  <span>Running for {daysCount} days ({startDate} to {endDate})</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {(sh.showtimes || []).map((t: string, idx: number) => {
+                                // Validate against the MOST RECENT booking date in the group to be safe, 
+                                // or maybe the earliest? Usually validity depends on whether it's past/future relative to NOW.
+                                // So we check against startDate.
+                                const validation = validateShowtime(startDate, t);
+                                const status = getShowtimeStatus(startDate, t);
+                                return (
+                                  <span
+                                    key={`${sh._id}-t-${idx}`}
+                                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] border ${validation.isValid
+                                      ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30'
+                                      : validation.isPast
+                                        ? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+                                        : 'bg-yellow-500/15 text-yellow-200 border-yellow-400/30'
+                                      }`}
+                                    title={status.tooltip}
+                                  >
+                                    <i className="fas fa-clock"></i>
+                                    {t}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                      </>
-                    )}
+                    <div className="flex items-center gap-2 mt-1 ml-3">
+                      {editingId === sh._id ? (
+                        <>
+                          <button onClick={async () => {
+                            const parsed = parseAndValidateShowtimes(editShowtimesInput);
+                            if (parsed === null) return;
+
+                            const idsToDelete = groupIds; // All IDs in group
+                            const originalMovieId = (typeof sh.movieId === 'string') ? sh.movieId : (sh.movieId?._id || sh.movieId?.id);
+                            const originalScreenId = String(sh.screenId || selectedScreenId);
+
+                            const newMovieId = editMovieId || originalMovieId;
+                            const newScreenId = editScreenId || originalScreenId;
+
+                            // Validation
+                            let newMovie = ownerMovies.find((m: any) => String(m._id) === String(newMovieId));
+                            if (!newMovie && typeof sh.movieId === 'object') newMovie = sh.movieId;
+                            const durationMin = parseDurationToMinutes(newMovie?.duration ?? newMovie?.runtime ?? null);
+
+                            if (!durationMin || durationMin <= 0) {
+                              setShowtimeError('Movie duration not available for validation.');
+                              return;
+                            }
+
+                            // Internal overlap check
+                            const internalErr = detectInternalOverlaps(parsed, durationMin);
+                            if (internalErr) { setShowtimeError(internalErr); return; }
+
+                            // Overlap against existing (BUT exclude ALL shows in the current group)
+                            let existingShowsForTarget = shows;
+                            if (String(newScreenId) !== String(selectedScreenId)) {
+                              try {
+                                const list = await apiService.getScreenShows(newScreenId);
+                                if (list.success) existingShowsForTarget = list.data || [];
+                              } catch { }
+                            }
+
+                            // existing needs flat list of intervals excluding current group
+                            const existingIntervals = [];
+                            for (const s of existingShowsForTarget) {
+                              if (idsToDelete.includes(s._id)) continue; // skip current group
+                              const durRaw = (s.movieId?.duration ?? s.movieId?.runtime ?? s.duration ?? s.runtime ?? null);
+                              const dur = parseDurationToMinutes(durRaw) ?? 0;
+                              if (dur <= 0 || !Array.isArray(s.showtimes)) continue;
+                              for (const st of s.showtimes) {
+                                const start = parseTimeToMinutes(String(st));
+                                if (!isNaN(start)) existingIntervals.push({ start, end: start + dur, label: String(st), showId: s._id });
+                              }
+                            }
+
+                            const extErr = detectOverlapAgainstExisting(parsed, durationMin, existingIntervals);
+                            if (extErr) { setShowtimeError(extErr); return; }
+
+                            setShowtimeError(null);
+
+                            // EXECUTE DELETE & SAVE
+                            // 1. Delete all old shows
+                            await Promise.all(idsToDelete.map((id: string) =>
+                              apiService.deleteScreenShow(originalScreenId, id).catch(() => { })
+                            ));
+
+                            // 2. Create new shows 
+                            // The API supports range creation. We can use that if we want contiguous dates.
+                            // But here we might have arbitrary dates.
+                            // For simplicity, if the user edits, we might just recreate for the SAME dates as the group.
+                            // Or we can assume they want the same range (startDate, count).
+
+                            // Recreating for the EXACT dates in the group (preserves gaps if any, though UI implies ranges)
+                            // Ideally we use saveScreenShows for the range starting at earliest date
+
+                            const save = await apiService.saveScreenShows(
+                              newScreenId,
+                              newMovieId,
+                              parsed,
+                              startDate, // Start from the first date of the group
+                              Math.max(0, daysCount - 1) // Duration
+                            );
+
+                            if (save.success) {
+                              setEditingId(null);
+                              // Refresh
+                              try {
+                                const list = await apiService.getScreenShows(newScreenId);
+                                if (list.success) setShows(list.data || []);
+                              } catch { }
+                            } else {
+                              setShowtimeError(save.error || 'Failed to save');
+                            }
+
+                          }} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded">Save</button>
+                          <button onClick={() => { setEditingId(null); setShowtimeError(null); }} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded">Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => {
+                            setEditingId(sh._id);
+                            const movieKey = (typeof sh.movieId === 'string') ? sh.movieId : (sh.movieId?._id || '');
+                            setEditMovieId(String(movieKey));
+                            setEditScreenId(String(sh.screenId || selectedScreenId || '1'));
+                            setEditShowtimesInput(Array.isArray(sh.showtimes) ? sh.showtimes.join(', ') : '');
+                          }} className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded">Edit</button>
+                          <button onClick={async () => {
+                            if (!confirm(`Are you sure you want to delete shows for ${daysCount} dates?`)) return;
+                            const idsToDelete = groupIds;
+                            await Promise.all(idsToDelete.map((id: string) =>
+                              apiService.deleteScreenShow(String(sh.screenId || selectedScreenId), id)
+                            ));
+                            // Optimistic update
+                            setShows((prev: any) => prev.filter((x: any) => !idsToDelete.includes(x._id)));
+                          }} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded">Delete</button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 mt-1 ml-3">
-                  {editingId === sh._id ? (
-                    <>
-                      <button onClick={async()=>{
-                        const parsed = parseAndValidateShowtimes(editShowtimesInput);
-                        if (parsed === null) return;
-                        const originalMovieId = (typeof sh.movieId === 'string') ? sh.movieId : (sh.movieId?._id || sh.movieId?.id);
-                        const originalScreenId = String(sh.screenId || selectedScreenId);
-                        const newMovieId = editMovieId || originalMovieId;
-                        const newScreenId = editScreenId || originalScreenId;
-                        // Pull duration for the (possibly) new movie
-                        let newMovie = ownerMovies.find((m:any)=> String(m._id) === String(newMovieId));
-                        if (!newMovie && typeof sh.movieId === 'object') newMovie = sh.movieId;
-                        const durationMin = parseDurationToMinutes(newMovie?.duration ?? newMovie?.runtime ?? null);
-                        if (!durationMin || durationMin <= 0) {
-                          setShowtimeError('Movie duration not available for validation.');
-                          return;
-                        }
-                        // Validate overlaps within plan
-                        const internalErr = detectInternalOverlaps(parsed, durationMin);
-                        if (internalErr) { setShowtimeError(internalErr); return; }
-                        // Load existing shows for target screen (if changed, fetch fresh)
-                        let existingShowsForTarget = shows;
-                        if (String(newScreenId) !== String(selectedScreenId)) {
-                          try {
-                            const list = await apiService.getScreenShows(newScreenId);
-                            if (list.success) existingShowsForTarget = list.data || [];
-                          } catch {}
-                        }
-                        const existing = getExistingShowIntervals(existingShowsForTarget);
-                        const extErr = detectOverlapAgainstExisting(parsed, durationMin, existing, String(sh._id)) || hasExactDuplicateAgainstExisting(parsed, existingShowsForTarget, String(sh._id));
-                        if (extErr) { setShowtimeError(extErr); return; }
-                        setShowtimeError(null);
-                        // If movie or screen changed, remove the old doc to avoid unique clash
-                        if (newMovieId !== originalMovieId || newScreenId !== originalScreenId) {
-                          try { await apiService.deleteScreenShow(originalScreenId, sh._id); } catch {}
-                        }
-                        const save = await apiService.saveScreenShows(
-                          newScreenId, 
-                          newMovieId, 
-                          parsed, 
-                          bookingDate || getTodayIso(), 
-                          Math.max(0, (runningDays || 1) - 1)
-                        );
-                        if (save.success) {
-                          setEditingId(null);
-                          try {
-                            // Refresh ALL shows for the screen after successful edit
-                            const list = await apiService.getScreenShows(newScreenId);
-                            if (list.success) setShows(list.data || []);
-                          } catch {}
-                        }
-                      }} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded">Save</button>
-                      <button onClick={()=>{ setEditingId(null); setShowtimeError(null); }} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded">Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={()=>{
-                        setEditingId(sh._id);
-                        const movieKey = (typeof sh.movieId === 'string') ? sh.movieId : (sh.movieId?._id || '');
-                        setEditMovieId(String(movieKey));
-                        setEditScreenId(String(sh.screenId || selectedScreenId || '1'));
-                        setEditShowtimesInput(Array.isArray(sh.showtimes) ? sh.showtimes.join(', ') : '');
-                      }} className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded">Edit</button>
-                <button onClick={async()=>{
-                  const res = await apiService.deleteScreenShow(String(sh.screenId || selectedScreenId), sh._id);
-                  if (res.success) setShows(prev=>prev.filter(x=>x._id!==sh._id));
-                }} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded">Delete</button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
+                )
+              })
+            }
           </div>
         </div>
       </main>
-      <Modal isOpen={popupOpen} onClose={()=>setPopupOpen(false)}>
+      <Modal isOpen={popupOpen} onClose={() => setPopupOpen(false)}>
         <div className="text-gray-900">
           {popupContent.title && <h3 className="text-lg font-semibold mb-2">{popupContent.title}</h3>}
           <p className="text-sm">{popupContent.message}</p>
           <div className="mt-4 flex justify-end">
-            <button onClick={()=>setPopupOpen(false)} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded">OK</button>
+            <button onClick={() => setPopupOpen(false)} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded">OK</button>
           </div>
         </div>
       </Modal>

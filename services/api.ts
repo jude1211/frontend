@@ -10,7 +10,10 @@ const normalizeApiBase = (base?: string): string | undefined => {
 };
 
 const VITE_BASE = normalizeApiBase(RAW_BASE);
-const DEFAULT_BASES = ['https://backend-bnv.onrender.com/api/v1'];
+const DEFAULT_BASES = [
+  'http://localhost:5000/api/v1',
+  'https://backend-bnv.onrender.com/api/v1'
+];
 const API_BASE_CANDIDATES = VITE_BASE ? [VITE_BASE] : DEFAULT_BASES;
 
 // Import request cache and throttling
@@ -19,7 +22,7 @@ import { requestThrottle } from '../utils/requestThrottle';
 
 // Add error logging for debugging
 const originalFetch = window.fetch;
-window.fetch = function(...args) {
+window.fetch = function (...args) {
   console.log('🌐 API Request:', args[0]);
   console.log('🌐 Request details:', args[1]);
 
@@ -105,7 +108,7 @@ class ApiService {
   // Live seat layout for a show (with availability)
   async getLiveSeatLayout(screenId: string, bookingDate: string, showtime: string): Promise<ApiResponse<any>> {
     const endpoint = `/seat-layout/${encodeURIComponent(screenId)}/${encodeURIComponent(bookingDate)}/${encodeURIComponent(showtime)}`;
-    
+
     // Throttle seat layout requests to prevent excessive calls
     return requestThrottle.throttle(
       `seat-layout-${screenId}-${bookingDate}-${showtime}`,
@@ -151,9 +154,23 @@ class ApiService {
     const fetchPromise = (async () => {
       for (const base of API_BASE_CANDIDATES) {
         // Prepare per-attempt timeout and controller outside inner try to avoid scope issues
-        const timeoutMs = isFormData ? 30000 : 12000;
+        const timeoutMs = isFormData ? 60000 : 30000; // Increased to 30s/60s for Render cold starts
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const timeoutId = setTimeout(() => controller.abort('Timeout'), timeoutMs);
+
+        // Handle external abort signal
+        const externalSignal = options.signal;
+        if (externalSignal) {
+          if (externalSignal.aborted) {
+            clearTimeout(timeoutId);
+            throw new DOMException('Aborted', 'AbortError');
+          }
+          externalSignal.addEventListener('abort', () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+          });
+        }
+
         try {
           const defaultHeaders = this.getAuthHeaders(isFormData);
           const optionHeaders = (options.headers || {}) as HeadersInit;
@@ -179,7 +196,7 @@ class ApiService {
               data,
               retryCount
             });
-            
+
             // Retry on rate limit or server errors (but not on client errors)
             if ((response.status === 429 || response.status >= 500) && retryCount < 3) {
               const backoffDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
@@ -187,7 +204,7 @@ class ApiService {
               await new Promise(resolve => setTimeout(resolve, backoffDelay));
               return this.tryFetch<T>(endpoint, options, isFormData, useCache, retryCount + 1);
             }
-            
+
             const error: any = new Error(data.message || data.error || 'Request failed');
             error.status = response.status;
             error.data = data;
@@ -218,12 +235,12 @@ class ApiService {
 
     try {
       const result = await fetchPromise;
-      
+
       // Cache successful GET requests
       if (useCache && (!options.method || options.method === 'GET') && result.success) {
         // Different TTL for different types of data
         let ttl = 5 * 60 * 1000; // 5 minutes default
-        
+
         if (endpoint.includes('/movies/now-showing') || endpoint.includes('/movies/coming-soon')) {
           ttl = 10 * 60 * 1000; // 10 minutes for movie lists
         } else if (endpoint.includes('/seat-layout')) {
@@ -231,13 +248,13 @@ class ApiService {
         } else if (endpoint.includes('/movies/') && !endpoint.includes('/showtimes')) {
           ttl = 15 * 60 * 1000; // 15 minutes for movie details
         }
-        
+
         requestCache.set(endpoint, result, ttl);
       } else if ((options.method && options.method !== 'GET') && result.success) {
         // Invalidate related GET caches on successful mutations
         this.invalidateRelatedCache(endpoint);
       }
-      
+
       return result;
     } finally {
       // Clear pending request
@@ -286,7 +303,7 @@ class ApiService {
       // Optional: broadcast a lightweight event for components that opt-in to listen
       try {
         window.dispatchEvent(new CustomEvent('api:dataChanged', { detail: { root, endpoint: path } }));
-      } catch {}
+      } catch { }
     } catch (e) {
       console.warn('Cache invalidation error:', e);
     }
@@ -472,7 +489,7 @@ class ApiService {
       const requestBody: any = { movieId, rating };
       if (review) requestBody.review = review;
       if (bookingId) requestBody.bookingId = bookingId;
-      
+
       const result = await this.makeRequest<any>('/movie-ratings', {
         method: 'POST',
         body: JSON.stringify(requestBody)
@@ -545,7 +562,7 @@ class ApiService {
   }
   async adminCreateMovie(payload: any): Promise<ApiResponse<any>> {
     return this.makeRequest<any>('/admin/movies', { method: 'POST', body: JSON.stringify(payload) });
-    }
+  }
   async adminUpdateMovie(id: string, patch: any): Promise<ApiResponse<any>> {
     return this.makeRequest<any>(`/admin/movies/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) });
   }
@@ -651,6 +668,18 @@ class ApiService {
     return this.makeRequest<any[]>(endpoint);
   }
 
+  async searchTheatreOwners(query: string): Promise<ApiResponse<any[]>> {
+    return this.makeRequest<any[]>(`/theatres/owners/search?query=${encodeURIComponent(query)}`);
+  }
+
+  async getPublicTheatreScreens(ownerId: string): Promise<ApiResponse<any[]>> {
+    return this.makeRequest<any[]>(`/theatres/owners/${encodeURIComponent(ownerId)}/screens/public`);
+  }
+
+  async getPublicTheatreDates(ownerId: string): Promise<ApiResponse<string[]>> {
+    return this.makeRequest<string[]>(`/theatres/owners/${encodeURIComponent(ownerId)}/dates/public`);
+  }
+
   async getTheatre(theatreId: string): Promise<ApiResponse<any>> {
     return this.makeRequest<any>(`/theatres/${theatreId}`);
   }
@@ -737,14 +766,14 @@ class ApiService {
   async approveApplication(applicationId: string): Promise<ApiResponse<any>> {
     console.log('🔧 API Service: Approving application', applicationId);
     console.log('🔧 API Service: Making PATCH request to /theatres/admin/applications/' + applicationId + '/approve');
-    
+
     const token = localStorage.getItem('authToken');
     console.log('🔧 API Service: Auth token exists:', !!token);
-    
+
     const response = await this.makeRequest<any>(`/theatres/admin/applications/${applicationId}/approve`, {
       method: 'PATCH'
     });
-    
+
     console.log('🔧 API Service: Response received:', response);
     return response;
   }
@@ -759,7 +788,7 @@ class ApiService {
   // Theatre Owner methods
   async theatreOwnerLogin(username: string, password: string): Promise<ApiResponse<any>> {
     console.log('🎭 Theatre Owner Login attempt:', { username, endpoint: '/theatre-owner/login' });
-    
+
     const response = await this.makeRequest<any>('/theatre-owner/login', {
       method: 'POST',
       body: JSON.stringify({ username, password })
@@ -991,12 +1020,12 @@ class ApiService {
     });
   }
 
-  async updateScreenConfiguration(ownerId: string, screenNumber: string, payload: { 
-    rows?: string; 
-    columns?: string; 
-    aisleColumns?: string; 
-    seatClasses?: Array<{ label: string; price: string }>; 
-    seatingCapacity?: string; 
+  async updateScreenConfiguration(ownerId: string, screenNumber: string, payload: {
+    rows?: string;
+    columns?: string;
+    aisleColumns?: string;
+    seatClasses?: Array<{ label: string; price: string }>;
+    seatingCapacity?: string;
   }): Promise<ApiResponse<{ message: string; screen: any }>> {
     const token = localStorage.getItem('theatreOwnerToken');
     return this.makeRequest<{ message: string; screen: any }>(`/theatres/owner/${encodeURIComponent(ownerId)}/screens/${encodeURIComponent(screenNumber)}`, {
@@ -1140,6 +1169,17 @@ class ApiService {
         'Authorization': `Bearer ${token}`
       }
     });
+  }
+
+  // TMDB Proxy methods
+  async searchTMDBMovies(query: string, page: number = 1, signal?: AbortSignal): Promise<ApiResponse<any>> {
+    const tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${(import.meta as any)?.env?.VITE_TMDB_API_KEY || 'db5d2d0eb44a815f1f1f3f22f188bc55'}&query=${encodeURIComponent(query)}&page=${page}&include_adult=false`;
+    return this.makeRequest<any>(`/proxy/tmdb?url=${encodeURIComponent(tmdbUrl)}`, { method: 'GET', signal }, false);
+  }
+
+  async getTMDBMovieDetails(movieId: number): Promise<ApiResponse<any>> {
+    const tmdbUrl = `https://api.themoviedb.org/3/movie/${movieId}?api_key=${(import.meta as any)?.env?.VITE_TMDB_API_KEY || 'db5d2d0eb44a815f1f1f3f22f188bc55'}&append_to_response=credits,videos`;
+    return this.makeRequest<any>(`/proxy/tmdb?url=${encodeURIComponent(tmdbUrl)}`, { method: 'GET' }, false);
   }
 }
 

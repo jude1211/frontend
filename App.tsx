@@ -32,6 +32,8 @@ import DynamicMovieLanding from './pages/DynamicMovieLanding';
 import LiveSeatLayoutPage from './pages/LiveSeatLayoutPage';
 import BookingConfirmationPage from './pages/BookingConfirmationPage';
 import BookingHistory from './components/BookingHistory';
+import BookSpecialMomentPage from './pages/BookSpecialMomentPage';
+import BookSpecialMomentSchedulePage from './pages/BookSpecialMomentSchedulePage';
 
 const App: React.FC = () => {
   return (
@@ -49,6 +51,8 @@ const App: React.FC = () => {
                 <Route path="/booking-confirmation/:bookingId" element={<BookingConfirmationPage />} />
                 <Route path="/select-seats/:movieId/:screenId/:bookingDate/:time" element={<SeatSelectionPage />} />
                 <Route path="/snacks" element={<SnackOrderPage />} />
+                <Route path="/book-special-moment" element={<BookSpecialMomentPage />} />
+                <Route path="/book-special-moment/schedule" element={<BookSpecialMomentSchedulePage />} />
                 <Route path="/profile" element={
                   <ProtectedRoute>
                     <ProfilePage />
