@@ -22,10 +22,11 @@ const ScreenManagement: React.FC = () => {
     numRows: 8,
     numCols: 12,
     aisleColumns: [5, 9],
+    // Ensure alphabets start from Balcony (VIP) at the top by default
     seatClassRules: [
-      { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
-      { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
-      { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
+      { rows: 'A-C', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' },
+      { rows: 'D-F', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
+      { rows: 'G-H', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' }
     ]
   });
   const [selectedSeatInfo, setSelectedSeatInfo] = useState<{ id: string; rowLabel: string; columnNumber: number; seatClass?: SeatClassRule } | null>(null);
@@ -42,6 +43,92 @@ const ScreenManagement: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   
+  const buildRowLabelMapFromSeats = (seats: any[], totalRowsHint?: number) => {
+    // Determine visual row order by Y (top to bottom).
+    // Fallbacks:
+    // - if y missing, use rowLabel charCode ordering
+    // - if seats empty, return empty map
+    if (!Array.isArray(seats) || seats.length === 0) return new Map<string, string>();
+
+    const byRow = new Map<string, { yMin: number; yAvg: number; count: number }>();
+    for (const s of seats) {
+      const row = String(s?.rowLabel || '');
+      if (!row) continue;
+      const y = typeof s?.y === 'number' ? s.y : Number.NaN;
+      const current = byRow.get(row);
+      if (!current) {
+        byRow.set(row, {
+          yMin: Number.isFinite(y) ? y : Number.POSITIVE_INFINITY,
+          yAvg: Number.isFinite(y) ? y : 0,
+          count: Number.isFinite(y) ? 1 : 0
+        });
+      } else {
+        if (Number.isFinite(y)) {
+          current.yMin = Math.min(current.yMin, y);
+          current.yAvg += y;
+          current.count += 1;
+        }
+      }
+    }
+
+    const rows = Array.from(byRow.entries()).map(([rowLabel, stats]) => {
+      const hasY = stats.count > 0 && Number.isFinite(stats.yMin) && stats.yMin !== Number.POSITIVE_INFINITY;
+      const yAvg = hasY ? stats.yAvg / stats.count : Number.NaN;
+      return { rowLabel, yMin: stats.yMin, yAvg, hasY };
+    });
+
+    rows.sort((a, b) => {
+      if (a.hasY && b.hasY) return a.yMin - b.yMin;
+      if (a.hasY) return -1;
+      if (b.hasY) return 1;
+      return a.rowLabel.localeCompare(b.rowLabel);
+    });
+
+    const total = typeof totalRowsHint === 'number' && totalRowsHint > 0 ? totalRowsHint : rows.length;
+    const map = new Map<string, string>();
+    for (let i = 0; i < Math.min(rows.length, total); i++) {
+      map.set(rows[i].rowLabel, String.fromCharCode('A'.charCodeAt(0) + i));
+    }
+    return map;
+  };
+
+  const normalizeSeatRows = (seats: any[], totalRowsHint?: number) => {
+    const rowMap = buildRowLabelMapFromSeats(seats, totalRowsHint);
+    if (rowMap.size === 0) return { seats, rowMap };
+    const normalized = seats.map((s: any) => {
+      const oldRow = String(s?.rowLabel || '');
+      const newRow = rowMap.get(oldRow) || oldRow;
+      return {
+        ...s,
+        rowLabel: newRow,
+        originalRow: s?.originalRow ?? oldRow
+      };
+    });
+    return { seats: normalized, rowMap };
+  };
+
+  const compressRowLabelsToRanges = (labels: string[]) => {
+    const uniq = Array.from(new Set(labels.filter(Boolean)));
+    uniq.sort((a, b) => a.charCodeAt(0) - b.charCodeAt(0));
+    if (uniq.length === 0) return 'A';
+
+    const parts: string[] = [];
+    let start = uniq[0];
+    let prev = uniq[0];
+    for (let i = 1; i < uniq.length; i++) {
+      const cur = uniq[i];
+      if (cur.charCodeAt(0) === prev.charCodeAt(0) + 1) {
+        prev = cur;
+      } else {
+        parts.push(start === prev ? start : `${start}-${prev}`);
+        start = cur;
+        prev = cur;
+      }
+    }
+    parts.push(start === prev ? start : `${start}-${prev}`);
+    return parts.join(',');
+  };
+
   // Add Screen Modal State
   const [showAddScreenModal, setShowAddScreenModal] = useState(false);
   const [newScreenName, setNewScreenName] = useState('');
@@ -271,32 +358,72 @@ const ScreenManagement: React.FC = () => {
           seatClasses: layout.seatClasses?.length || 0
         });
         
-        // Restore the exact configuration
+        const metaRows = layout.meta?.rows || 8;
+        const metaCols = layout.meta?.columns || 12;
+        const metaAisles = layout.meta?.aisles || [5, 9];
+
+        // Normalize row labels so top-most rows start at A.
+        const rawSeats = Array.isArray(layout.seats) ? layout.seats : [];
+        const { seats: normalizedSeats } = normalizeSeatRows(rawSeats, metaRows);
+
+        // Rebuild seatClassRules based on normalized seats when possible,
+        // so Balcony/VIP can start from A in this screen.
+        let rebuiltRules: SeatClassRule[] | null = null;
+        if (normalizedSeats.length > 0) {
+          const byClass = new Map<string, { rule: any; rows: string[] }>();
+
+          // Seed with existing seatClasses metadata (price/tier/color), if present
+          (layout.seatClasses || []).forEach((sc: any) => {
+            byClass.set(String(sc.className), { rule: sc, rows: [] });
+          });
+
+          normalizedSeats.forEach((s: any) => {
+            const cn = String(s?.className || '');
+            if (!cn) return;
+            if (!byClass.has(cn)) byClass.set(cn, { rule: { className: cn, price: s.price, tier: s.tier, color: s.color }, rows: [] });
+            byClass.get(cn)!.rows.push(String(s.rowLabel || ''));
+          });
+
+          rebuiltRules = Array.from(byClass.values())
+            .map(({ rule, rows }) => ({
+              rows: compressRowLabelsToRanges(rows),
+              className: rule.className,
+              price: rule.price,
+              tier: rule.tier,
+              color: rule.color
+            }))
+            // Keep UI grouping order: VIP/Balcony first, then Premium/Gold, then Base/Silver
+            .sort((a, b) => {
+              const order = ['VIP', 'Premium', 'Base'];
+              return order.indexOf(a.tier) - order.indexOf(b.tier);
+            });
+        }
+
         setSeatConfig({
-          numRows: layout.meta?.rows || 8,
-          numCols: layout.meta?.columns || 12,
-          aisleColumns: layout.meta?.aisles || [5, 9],
-          seatClassRules: layout.seatClasses?.map((sc: any) => ({
+          numRows: metaRows,
+          numCols: metaCols,
+          aisleColumns: metaAisles,
+          seatClassRules: rebuiltRules || layout.seatClasses?.map((sc: any) => ({
             rows: sc.rows,
             className: sc.className,
             price: sc.price,
             tier: sc.tier,
             color: sc.color
           })) || [
-            { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
-            { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
-            { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
+            { rows: 'A-C', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' },
+            { rows: 'D-F', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
+            { rows: 'G-H', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' }
           ]
         });
         
         setAisleInput(layout.meta?.aisles?.join(', ') || '5, 9');
         
-        // Store the complete seat data for rendering
-        if (layout.seats && layout.seats.length > 0) {
+        // Store the complete seat data for rendering (normalized)
+        if (normalizedSeats && normalizedSeats.length > 0) {
           console.log('Found saved seats in layout:', layout.seats.length);
           console.log('Sample saved seat:', layout.seats[0]);
           // Process saved seats to restore exact layout
-          processSavedSeats(layout.seats);
+          processSavedSeats(normalizedSeats);
         } else {
           console.log('No saved seats found in layout');
         }
@@ -707,9 +834,10 @@ const ScreenManagement: React.FC = () => {
           numCols,
           aisleColumns: aisleCols,
           seatClassRules: seatClasses.length > 0 ? seatClasses : [
-            { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
-            { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
-            { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
+            // When deriving from screen data, keep Balcony at the top
+            { rows: 'A-C', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' },
+            { rows: 'D-F', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
+            { rows: 'G-H', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' }
           ]
         });
         
@@ -795,9 +923,9 @@ const ScreenManagement: React.FC = () => {
               numCols,
               aisleColumns: aisleCols,
               seatClassRules: seatClasses.length > 0 ? seatClasses : [
-                { rows: 'A-C', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
-                { rows: 'D-F', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' },
-                { rows: 'G-H', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' }
+                { rows: 'A-C', className: 'Balcony', price: 320, tier: 'VIP', color: '#22c55e' },
+                { rows: 'D-F', className: 'Gold', price: 250, tier: 'Premium', color: '#f59e0b' },
+                { rows: 'G-H', className: 'Silver', price: 180, tier: 'Base', color: '#9ca3af' }
               ]
             });
             
@@ -843,13 +971,17 @@ const ScreenManagement: React.FC = () => {
   const getRowRangeForSeatClass = (className: string, totalRows: number): string => {
     if (totalRows <= 0) return 'A';
     
-    // Updated distribution: Gold gets more seats (50%), Silver and Balcony get fewer (25% each)
+    // Updated distribution: Balcony/VIP starts at top, then Gold/Premium, then Silver/Base
     const ranges: Record<string, { start: number; end: number }> = {
-      'Gold': { start: 0, end: Math.floor(totalRows * 0.5) - 1 },
-      'Silver': { start: Math.floor(totalRows * 0.5), end: Math.floor(totalRows * 0.75) - 1 },
-      'Balcony': { start: Math.floor(totalRows * 0.75), end: totalRows - 1 },
-      'Premium': { start: 0, end: Math.floor(totalRows * 0.5) - 1 }, // Same as Gold
-      'VIP': { start: Math.floor(totalRows * 0.75), end: totalRows - 1 } // Same as Balcony
+      // Balcony / VIP takes first 25%
+      'Balcony': { start: 0, end: Math.floor(totalRows * 0.25) - 1 },
+      'VIP': { start: 0, end: Math.floor(totalRows * 0.25) - 1 },
+      // Gold / Premium takes middle 50%
+      'Gold': { start: Math.floor(totalRows * 0.25), end: Math.floor(totalRows * 0.75) - 1 },
+      'Premium': { start: Math.floor(totalRows * 0.25), end: Math.floor(totalRows * 0.75) - 1 },
+      // Silver / Base takes last 25%
+      'Silver': { start: Math.floor(totalRows * 0.75), end: totalRows - 1 },
+      'Base': { start: Math.floor(totalRows * 0.75), end: totalRows - 1 }
     };
     
     const range = ranges[className] || { start: 0, end: totalRows - 1 };

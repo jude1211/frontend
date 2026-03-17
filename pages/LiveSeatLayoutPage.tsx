@@ -4,6 +4,7 @@ import { apiService } from '../services/api';
 import { socketService } from '../services/socketService';
 import SeatLayoutBuilder, { SeatLayoutConfig } from '../components/SeatLayoutBuilder';
 import BookNViewLoader from '../components/BookNViewLoader';
+import Theatre3DView from '../components/Theatre3DView';
 
 interface Movie {
   _id: string;
@@ -61,6 +62,8 @@ const LiveSeatLayoutPage: React.FC = () => {
     countryCode: '+91'
   });
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
+  const [show3D, setShow3D] = useState(false);
+  const [focusedSeatKey, setFocusedSeatKey] = useState<string | null>(null);
   const MAX_SEATS = 10; // Maximum number of seats that can be selected
 
   // Fetch movie details
@@ -267,6 +270,10 @@ const LiveSeatLayoutPage: React.FC = () => {
     
     // seatId is now the seatKey format (e.g., "A-1")
     const seatKey = seatId;
+
+    // Switch into 3D view and focus this seat
+    setFocusedSeatKey(seatKey);
+    setShow3D(true);
     
     // Don't allow selection of reserved seats
     if (reservedSeats.has(seatKey)) {
@@ -609,8 +616,14 @@ const LiveSeatLayoutPage: React.FC = () => {
       const response = await apiService.confirmSeatBooking(screenId || '', bookingDate || '', showtime || '', bookingPayload);
       
         if (response.success) {
+          if (!response.data) {
+            setBookingError('Booking succeeded but no booking data returned');
+            return;
+          }
+          const bookingId = response.data.bookingId;
+          const bookingTotalAmount = response.data.totalAmount;
           console.log('Booking successful:', response.data);
-          setBookingSuccess({ bookingId: response.data.bookingId, totalAmount: response.data.totalAmount });
+          setBookingSuccess({ bookingId, totalAmount: bookingTotalAmount });
           
           // Clear selected seats immediately since they're now reserved
           setSelectedSeats([]);
@@ -627,7 +640,7 @@ const LiveSeatLayoutPage: React.FC = () => {
           
           // Immediately launch Razorpay payment flow instead of navigating to checkout
           try {
-            sessionStorage.setItem('currentBookingId', response.data.bookingId);
+            sessionStorage.setItem('currentBookingId', bookingId);
           } catch {}
 
           // Ensure Razorpay SDK is loaded
@@ -645,7 +658,7 @@ const LiveSeatLayoutPage: React.FC = () => {
 
           try {
             // Create Razorpay order on backend for this booking
-            const orderRes = await apiService.createPaymentOrder(response.data.bookingId);
+            const orderRes = await apiService.createPaymentOrder(bookingId);
             if (!orderRes.success || !orderRes.data) throw new Error(orderRes.error || 'Failed to create payment order');
             const { order, keyId } = orderRes.data;
 
@@ -659,11 +672,11 @@ const LiveSeatLayoutPage: React.FC = () => {
               prefill: {
                 email: contactDetails.email || '',
               },
-              notes: { bookingId: response.data.bookingId },
+              notes: { bookingId },
               theme: { color: '#EF4444' },
               handler: async (rzpResp: any) => {
                 const verifyRes = await apiService.verifyPayment({
-                  bookingId: response.data.bookingId,
+                  bookingId,
                   razorpay_order_id: rzpResp.razorpay_order_id,
                   razorpay_payment_id: rzpResp.razorpay_payment_id,
                   razorpay_signature: rzpResp.razorpay_signature
@@ -1081,25 +1094,40 @@ const LiveSeatLayoutPage: React.FC = () => {
               <BookNViewLoader />
             </div>
           ) : seatLayoutConfig ? (
-            <div className="w-full">
-              <div className="flex justify-center">
-                <div className="bg-white/5 rounded-xl p-4 sm:p-8 border border-brand-dark/30 w-full max-w-screen-md sm:max-w-6xl">
-                  {console.log('SeatLayoutBuilder props:', {
-                    config: seatLayoutConfig,
-                    processedSeats: seatLayout.seats,
-                    selectedSeats: selectedSeats,
-                    selectedSeatsSet: Array.from(new Set(selectedSeats.map(s => `${s.rowLabel}-${s.number}`))),
-                    reservedSeats: Array.from(reservedSeats)
-                  })}
-                  <SeatLayoutBuilder
-                    config={seatLayoutConfig}
-                    editMode={false}
-                    processedSeats={new Map((seatLayout.seats || []).map((seat: any) => [`${seat.rowLabel}-${seat.number}`, seat]))}
-                    onSeatClick={handleSeatClick}
-                    selectedSeats={new Set(selectedSeats.map(s => `${s.rowLabel}-${s.number}`))}
-                    reservedSeats={reservedSeats}
-                  />
+            <div className="w-full space-y-4">
+              {/* 2D Layout */}
+              <div
+                className={`transition-all duration-500 ${show3D ? 'opacity-0 max-h-0 overflow-hidden' : 'opacity-100 max-h-[2000px]'}`}
+              >
+                <div className="flex justify-center">
+                  <div className="bg-white/5 rounded-xl p-4 sm:p-8 border border-brand-dark/30 w-full max-w-screen-md sm:max-w-6xl">
+                    <SeatLayoutBuilder
+                      config={seatLayoutConfig}
+                      editMode={false}
+                      processedSeats={new Map((seatLayout.seats || []).map((seat: any) => [`${seat.rowLabel}-${seat.number}`, seat]))}
+                      onSeatClick={handleSeatClick}
+                      selectedSeats={new Set(selectedSeats.map(s => `${s.rowLabel}-${s.number}`))}
+                      reservedSeats={reservedSeats}
+                    />
+                  </div>
                 </div>
+              </div>
+
+              {/* 3D View (embedded in-page) */}
+              <div className={`transition-all duration-500 ${show3D ? 'opacity-100' : 'opacity-0 max-h-0 overflow-hidden'}`}>
+                <Theatre3DView
+                  config={{
+                    numRows: seatLayoutConfig.numRows,
+                    numCols: seatLayoutConfig.numCols,
+                    aisleColumns: seatLayoutConfig.aisleColumns
+                  }}
+                  seats={seatLayout?.seats || []}
+                  selectedSeatKey={focusedSeatKey as any}
+                  selectedSeats={new Set(selectedSeats.map(s => `${s.rowLabel}-${s.number}`))}
+                  reservedSeats={reservedSeats}
+                  onBackTo2D={() => setShow3D(false)}
+                  className="bg-white/5 rounded-xl p-4 sm:p-6 border border-brand-dark/30"
+                />
               </div>
             </div>
           ) : (

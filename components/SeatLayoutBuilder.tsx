@@ -623,23 +623,14 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                 {/* Screen Section */}
                     <div className="flex justify-center">
                   <div className="relative max-w-full transform origin-top max-[420px]:scale-90 max-[360px]:scale-75">
-                    {/* Row Labels (Left Side) - Cinema Style - Only show labels for this tier's rows */}
-                    <div className="absolute -left-6 sm:-left-8 top-0 flex flex-col">
-                      {tier.rowLabels.map((rowLabel, labelIndex) => (
-                        <div 
-                          key={rowLabel} 
-                          className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-[10px] sm:text-xs font-bold text-gray-800 dark:text-gray-200"
-                          style={{ marginTop: `${labelIndex * 28}px` }}
-                        >
-                          {rowLabel}
-                        </div>
-                      ))}
-                    </div>
-
                     {/* Seating Grid */}
                     <div className="ml-2 inline-block">
                       {slice && Array.isArray(slice) ? slice.map((row, rowIdx) => (
                           <div key={rowIdx} className="flex items-center mb-1">
+                            {/* Row label aligned with each actual row */}
+                            <div className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-[10px] sm:text-xs font-bold text-gray-800 dark:text-gray-200 mr-1">
+                              {tier.rowLabels[rowIdx] || ''}
+                            </div>
                             <div className="flex">
                             {row && Array.isArray(row) ? row.map((cell, colIdx) => {
                               const isHover = hoverTarget && hoverTarget.r === rowIdx && hoverTarget.c === colIdx;
