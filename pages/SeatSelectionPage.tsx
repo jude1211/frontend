@@ -35,6 +35,17 @@ const SeatSelectionPage: React.FC = () => {
   const navigate = useNavigate();
   const { movieId, screenId, bookingDate, time } = useParams<{ movieId: string; screenId: string; bookingDate: string; time: string }>();
   const { selectedSeats, setSelectedSeats, totalSeatPrice } = useAppContext();
+
+  // Mirror the backend calculateTotal() formula so the displayed price matches Razorpay
+  // Backend: CGST 9% + SGST 9% + Service fee 2% + Convenience fee ₹20 (fixed)
+  const computeTotal = (baseSeatPrice: number): number => {
+    const cgst = baseSeatPrice * 0.09;
+    const sgst = baseSeatPrice * 0.09;
+    const serviceFee = baseSeatPrice * 0.02;
+    const convenienceFee = 20;
+    return Math.round(baseSeatPrice + cgst + sgst + serviceFee + convenienceFee);
+  };
+  const displayTotal = computeTotal(totalSeatPrice);
   const [bookingConfirming, setBookingConfirming] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [seatsLayout, setSeatsLayout] = useState<Seat[][]>([]);
@@ -67,11 +78,15 @@ const SeatSelectionPage: React.FC = () => {
           incoming.forEach((seat: any) => {
             const row = seat.rowLabel;
             if (!seatsByRow[row]) seatsByRow[row] = [];
+            
+            // Normalize liveStatus check
+            const isBooked = seat.liveStatus === 'booked' || seat.status === 'booked' || seat.isReserved;
+            
             seatsByRow[row].push({
               id: `${row}-${seat.number}`,
               row,
               number: seat.number,
-              status: seat.liveStatus === 'booked' ? SeatStatus.Booked : SeatStatus.Available,
+              status: isBooked ? SeatStatus.Booked : SeatStatus.Available,
               price: seat.price
             });
           });
@@ -175,7 +190,8 @@ const SeatSelectionPage: React.FC = () => {
           <div className="relative mx-auto" style={{ width: `${layoutBounds.width}px`, height: `${layoutBounds.height}px` }}>
             {rawSeats.map((s:any) => {
               const id = `${s.rowLabel}-${s.number}`;
-              const isBooked = s.liveStatus === 'booked';
+              // Robust booked check
+              const isBooked = s.liveStatus === 'booked' || s.status === 'booked' || s.isReserved;
               const isSelected = selectedSeats.some(x => x.id === id);
               // Build Seat conforming object for handler
               const seatObj: Seat = { id, row: s.rowLabel, number: s.number, status: isBooked ? SeatStatus.Booked : SeatStatus.Available, price: s.price };
@@ -220,7 +236,9 @@ const SeatSelectionPage: React.FC = () => {
           <h2 className="text-2xl font-bold mb-4 text-white">Booking Summary</h2>
           <div className="space-y-2">
             <div className="flex justify-between"><span className="text-gray-400">Seats ({selectedSeats.length}):</span> <span>{selectedSeats.map(s => `${s.row}${s.number}`).join(', ')}</span></div>
-            <div className="flex justify-between font-bold text-lg"><span className="text-white">Subtotal:</span> <span className="text-brand-red">₹{Number(totalSeatPrice).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Seat price:</span> <span>₹{Number(totalSeatPrice).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+            <div className="flex justify-between text-xs text-gray-500"><span>Taxes &amp; fees (CGST+SGST+Service+₹20):</span> <span>₹{(displayTotal - totalSeatPrice).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+            <div className="flex justify-between font-bold text-lg"><span className="text-white">Total:</span> <span className="text-brand-red">₹{Number(displayTotal).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
           </div>
           <p className="text-xs text-gray-500 mt-2">Dynamic Pricing Applied. Prices may vary.</p>
           <hr className="my-4 border-gray-600"/>
@@ -231,7 +249,7 @@ const SeatSelectionPage: React.FC = () => {
           </div>
           {bookingError && <div className="mt-3 text-sm text-red-400">{bookingError}</div>}
           <button onClick={handleConfirmBooking} disabled={selectedSeats.length === 0 || bookingConfirming} className="w-full mt-6 bg-brand-red text-white py-3 rounded-md font-bold hover:bg-red-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">
-            {bookingConfirming ? 'Processing…' : (selectedSeats.length > 0 ? `Pay ₹${Number(totalSeatPrice).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : 'Select Seats to Proceed')}
+            {bookingConfirming ? 'Processing…' : (selectedSeats.length > 0 ? `Pay ₹${Number(displayTotal).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : 'Select Seats to Proceed')}
           </button>
         </div>
       </div>

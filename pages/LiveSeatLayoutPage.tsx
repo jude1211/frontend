@@ -146,24 +146,42 @@ const LiveSeatLayoutPage: React.FC = () => {
         if (liveRes.success && liveRes.data) {
           const reserved = new Set<string>();
           
-          // The API returns reservedSeats as an array of seat numbers (e.g., ["J6", "J8"])
+          const normalizeSeatKey = (key: string) => {
+            if (!key) return key;
+            if (key.includes('-')) return key;
+            const match = key.match(/^([A-Z]+)(\d+)$/);
+            if (match) return `${match[1]}-${match[2]}`;
+            return key;
+          };
+          
+          // Primary: read reservedSeats array (available from both endpoints)
           if (liveRes.data.reservedSeats && Array.isArray(liveRes.data.reservedSeats)) {
             liveRes.data.reservedSeats.forEach((seatNumber: string) => {
-              reserved.add(seatNumber);
+              reserved.add(normalizeSeatKey(seatNumber));
             });
           }
           
-          // Also check the seats object if it exists (fallback)
-          if (liveRes.data.seats && typeof liveRes.data.seats === 'object') {
-            Object.values(liveRes.data.seats).forEach((seat: any) => {
-              if (seat.status === 'reserved' || seat.isReserved) {
+          // Secondary: read liveStatus per seat in the seats array  (main GET endpoint embeds it here)
+          if (liveRes.data.seats && Array.isArray(liveRes.data.seats)) {
+            liveRes.data.seats.forEach((seat: any) => {
+              if (seat.liveStatus === 'booked') {
                 reserved.add(`${seat.rowLabel}-${seat.number}`);
               }
             });
           }
           
+          // Tertiary: fall back to isReserved flag in seats object format
+          if (liveRes.data.seats && typeof liveRes.data.seats === 'object' && !Array.isArray(liveRes.data.seats)) {
+            Object.values(liveRes.data.seats).forEach((seat: any) => {
+              if (seat.status === 'reserved' || seat.isReserved) {
+                const seatKey = seat.rowLabel && seat.number ? `${seat.rowLabel}-${seat.number}` : normalizeSeatKey(`${seat.rowLabel}${seat.number}`);
+                reserved.add(seatKey);
+              }
+            });
+          }
+          
           setReservedSeats(reserved);
-          console.log('Fetched reserved seats:', Array.from(reserved));
+          console.log('Reserved seats loaded:', Array.from(reserved));
           console.log('Full API response:', liveRes.data);
         }
       } catch (err) {
@@ -196,11 +214,18 @@ const LiveSeatLayoutPage: React.FC = () => {
         const newReservedSeats = new Set<string>();
         data.reservedSeats.forEach((seat: any) => {
           // Handle both object format {seatNumber: "A-1"} and string format "A-1"
-          const seatKey = typeof seat === 'string' ? seat : seat.seatNumber;
+          let seatKey = typeof seat === 'string' ? seat : seat.seatNumber;
+          
+          // Normalize seatKey to "Row-Number" format
+          if (seatKey && !seatKey.includes('-')) {
+            const match = seatKey.match(/^([A-Z]+)(\d+)$/);
+            if (match) seatKey = `${match[1]}-${match[2]}`;
+          }
+          
           newReservedSeats.add(seatKey);
         });
         
-        console.log('🔄 Processed reserved seats:', Array.from(newReservedSeats));
+        console.log('🔄 Processed reserved seats (normalized):', Array.from(newReservedSeats));
         
         // Only update if there are actual changes
         const currentReservedArray = Array.from(reservedSeats).sort();

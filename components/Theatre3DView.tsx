@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useMemo, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Environment, OrbitControls, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -563,7 +563,7 @@ function CeilingLights({
   const endZ = depth / 2 - 1.5;
   const ceilingY = 4.8;
 
-  const lights: JSX.Element[] = [];
+  const lights: any[] = [];
   for (let r = 0; r < rows; r++) {
     const z = rows === 1 ? 0 : startZ + ((endZ - startZ) * r) / (rows - 1);
     for (let c = 0; c < cols; c++) {
@@ -583,11 +583,64 @@ function CeilingLights({
   return <group>{lights}</group>;
 }
 
+function SteppedFloor({
+  width,
+  depth,
+  rowCount,
+  rowSpacingZ,
+  rowRiseY,
+  seatModelScale,
+  seatModelMetrics
+}: {
+  width: number;
+  depth: number;
+  rowCount: number;
+  rowSpacingZ: number;
+  rowRiseY: number;
+  seatModelScale?: number;
+  seatModelMetrics?: SeatModelMetrics | null;
+}) {
+  const scaledSeatWidth = (seatModelMetrics?.width ?? 0) * (seatModelScale || 1);
+  const clearance = 0.12;
+  const halfW = width / 2 + (scaledSeatWidth > 0 ? scaledSeatWidth / 2 : 0.45) + clearance;
+  
+  const platforms = [];
+  
+  for (let r = 1; r < rowCount; r++) {
+    const y_r = r * rowRiseY;
+    const z_r = r * rowSpacingZ - depth / 2;
+    const isLast = r === rowCount - 1;
+    const pDepth = isLast ? rowSpacingZ + 4.0 : rowSpacingZ;
+    const pCenterZ = isLast ? z_r - rowSpacingZ / 2 + pDepth / 2 : z_r;
+    
+    platforms.push(
+      <mesh key={`tier-${r}`} position={[0, y_r / 2, pCenterZ]} receiveShadow castShadow>
+        <boxGeometry args={[halfW * 2, y_r, pDepth]} />
+        <meshStandardMaterial color="#070b12" roughness={0.98} metalness={0.02} />
+      </mesh>
+    );
+  }
+
+  return (
+    <group>
+      {/* Base floor covering the whole room */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+        <planeGeometry args={[Math.max(60, halfW * 2 + 10), Math.max(60, depth + 20)]} />
+        <meshStandardMaterial color="#070b12" roughness={0.98} metalness={0.02} />
+      </mesh>
+      {platforms}
+    </group>
+  );
+}
+
 function CameraDirector({
   targetSeatKey,
   seatPositions,
   screenCenter,
-  depth
+  depth,
+  seatModelMetrics,
+  seatModelScale,
+  rowSpacingZ
 }: {
   targetSeatKey?: SeatKey | null;
   seatPositions: Map<string, THREE.Vector3>;
@@ -597,13 +650,67 @@ function CameraDirector({
   seatModelScale?: number;
   rowSpacingZ?: number;
 }) {
+  const { gl } = useThree();
   const targetPos = useMemo(() => new THREE.Vector3(0, 0, 0), []);
   const targetLook = useMemo(() => new THREE.Vector3(), []);
   const tmp = useMemo(() => new THREE.Vector3(), []);
 
-  useFrame(({ camera }, delta) => {
-    // Default overview if nothing selected
-    const hasTarget = targetSeatKey && seatPositions.has(targetSeatKey);
+  const dragAngles = useRef({ x: 0, y: 0 });
+  const isDragging = useRef(false);
+  const previousPointer = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    dragAngles.current = { x: 0, y: 0 };
+  }, [targetSeatKey]);
+
+  useEffect(() => {
+    const el = gl.domElement;
+    if (!el) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (!targetSeatKey) return;
+      isDragging.current = true;
+      previousPointer.current = { x: e.clientX, y: e.clientY };
+      el.setPointerCapture(e.pointerId);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!isDragging.current) return;
+      const dx = e.clientX - previousPointer.current.x;
+      const dy = e.clientY - previousPointer.current.y;
+      previousPointer.current = { x: e.clientX, y: e.clientY };
+
+      const sensitivity = 0.005;
+      dragAngles.current.x -= dx * sensitivity;
+      dragAngles.current.y -= dy * sensitivity;
+
+      const maxTilt = Math.PI / 4;
+      dragAngles.current.y = THREE.MathUtils.clamp(dragAngles.current.y, -maxTilt, maxTilt);
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      isDragging.current = false;
+      if (el.hasPointerCapture(e.pointerId)) {
+        el.releasePointerCapture(e.pointerId);
+      }
+    };
+
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('pointercancel', onPointerUp);
+
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointermove', onPointerMove);
+      el.removeEventListener('pointerup', onPointerUp);
+      el.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [gl.domElement, targetSeatKey]);
+
+  useFrame((state, delta) => {
+    const camera = state.camera as THREE.PerspectiveCamera;
+    const hasTarget = !!(targetSeatKey && seatPositions.has(targetSeatKey));
     if (hasTarget) {
       const seat = seatPositions.get(targetSeatKey!)!;
       // First-person "from the seat" view:
@@ -614,8 +721,17 @@ function CameraDirector({
       const pose = computeFocusCameraPose({ seat, seatModelMetrics, seatModelScale, rowSpacingZ });
       targetPos.copy(pose.cameraPos);
 
-      // Subtle upward head-tilt for natural viewing posture (aim slightly above center)
-      targetLook.copy(screenCenter).add(tmp.set(0, 0.06, 0));
+      const baseTarget = tmp.copy(screenCenter);
+      baseTarget.y += 0.06;
+      const baseLook = new THREE.Vector3().subVectors(baseTarget, pose.cameraPos);
+
+      const spherical = new THREE.Spherical().setFromVector3(baseLook);
+      spherical.theta += dragAngles.current.x;
+      spherical.phi += dragAngles.current.y;
+      spherical.phi = THREE.MathUtils.clamp(spherical.phi, 0.1, Math.PI - 0.1);
+
+      const finalLookOffset = new THREE.Vector3().setFromSpherical(spherical);
+      targetLook.copy(pose.cameraPos).add(finalLookOffset);
 
       // Dynamic FOV: closer seats feel wider, back seats slightly narrower (32–65°)
       const d = targetPos.distanceTo(screenCenter);
@@ -716,9 +832,9 @@ export default function Theatre3DView({
 
       <div className="w-full h-[520px] rounded-xl overflow-hidden border border-white/10 bg-black/40">
         <Canvas
-          shadows={THREE.PCFShadowMap}
+          shadows
           dpr={[1, 2]}
-          gl={{ antialias: true, powerPreference: 'high-performance' } as any}
+          gl={{ antialias: true, powerPreference: 'high-performance', shadowMapType: THREE.PCFShadowMap } as any}
           camera={{ fov: 42, near: 0.1, far: 200, position: [0, 4.6, depth / 2 + 9.5] }}
           onCreated={({ gl, camera }) => {
             (gl as any).physicallyCorrectLights = true;
@@ -767,10 +883,15 @@ export default function Theatre3DView({
           </ThreeCanvasErrorBoundary>
 
           {/* Floor */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-            <planeGeometry args={[60, 60]} />
-            <meshStandardMaterial color="#070b12" roughness={0.98} metalness={0.02} />
-          </mesh>
+          <SteppedFloor
+            width={width}
+            depth={depth}
+            rowCount={rowCount}
+            rowSpacingZ={rowSpacingZ}
+            rowRiseY={rowRiseY}
+            seatModelMetrics={seatModelMetrics}
+            seatModelScale={seatModelScale}
+          />
 
           <CameraDirector
             targetSeatKey={selectedSeatKey}

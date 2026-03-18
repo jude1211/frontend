@@ -211,7 +211,12 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
     }
   };
 
-  const totalAmount = selectedSeats.reduce((sum, seat) => sum + seat.price, 0);
+  const seatSubtotal = selectedSeats.reduce((sum, seat) => sum + seat.price, 0);
+  const cgst = seatSubtotal * 0.09;
+  const sgst = seatSubtotal * 0.09;
+  const serviceFee = seatSubtotal * 0.02;
+  const convenienceFee = selectedSeats.length > 0 ? 20 : 0;
+  const totalAmount = Math.round(seatSubtotal + cgst + sgst + serviceFee + convenienceFee);
 
   if (!isOpen) return null;
 
@@ -262,18 +267,44 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
         {/* Selected Seats Summary */}
         {selectedSeats.length > 0 && (
           <div className="bg-brand-dark rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
-            <h3 className="text-base sm:text-lg font-semibold text-white mb-2 sm:mb-3">Selected Seats</h3>
-            <div className="flex flex-wrap gap-2 mb-2 sm:mb-3">
+            {/* Seat tags */}
+            <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
               {selectedSeats.map((seat, index) => (
                 <div key={index} className="bg-brand-red text-white px-2 sm:px-3 py-1 rounded-lg text-xs sm:text-sm">
                   {seat.rowLabel}{seat.number} - ₹{seat.price}
                 </div>
               ))}
             </div>
-            <div className="text-right">
-              <span className="text-xl sm:text-2xl font-bold text-white">
-                Total: ₹{totalAmount}
-              </span>
+
+            {/* Price Summary breakdown */}
+            <div className="border-t border-gray-700 pt-3">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Price Summary</h3>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between text-gray-300">
+                  <span>Seat price ({selectedSeats.length} seat{selectedSeats.length !== 1 ? 's' : ''})</span>
+                  <span>₹{seatSubtotal.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between text-gray-400">
+                  <span>CGST (9%)</span>
+                  <span>₹{cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-gray-400">
+                  <span>SGST (9%)</span>
+                  <span>₹{sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-gray-400">
+                  <span>Service fee (2%)</span>
+                  <span>₹{serviceFee.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-gray-400">
+                  <span>Convenience fee</span>
+                  <span>₹{convenienceFee.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+              <div className="flex justify-between font-bold text-base sm:text-lg text-white border-t border-gray-700 mt-2 pt-2">
+                <span>Total</span>
+                <span className="text-brand-red">₹{totalAmount.toLocaleString('en-IN')}</span>
+              </div>
             </div>
           </div>
         )}
@@ -298,7 +329,7 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
             disabled={selectedSeats.length === 0 || isBooking}
             className="bg-brand-red text-white px-4 sm:px-6 md:px-8 py-2 sm:py-3 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base order-1 sm:order-2"
           >
-            {isBooking ? 'Processing...' : `Book ${selectedSeats.length} Seat${selectedSeats.length !== 1 ? 's' : ''}`}
+            {isBooking ? 'Processing...' : selectedSeats.length > 0 ? `Pay ₹${totalAmount.toLocaleString('en-IN')} · ${selectedSeats.length} Seat${selectedSeats.length !== 1 ? 's' : ''}` : 'Select Seats'}
           </button>
         </div>
       </div>

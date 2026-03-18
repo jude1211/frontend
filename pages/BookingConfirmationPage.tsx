@@ -26,6 +26,15 @@ interface BookingDetails {
     price: number;
   }>;
   pricing: {
+    seatTotal?: number;
+    snackTotal?: number;
+    subtotal?: number;
+    taxes?: {
+      cgst?: number;
+      sgst?: number;
+      serviceFee?: number;
+      convenienceFee?: number;
+    };
     totalAmount: number;
     currency: string;
   };
@@ -551,14 +560,44 @@ const BookingConfirmationPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Total */}
+              {/* Price Summary with tax breakdown */}
               <div className="mt-6 pt-4 border-t border-gray-600">
-                <div className="flex justify-between items-center">
-                  <span className="text-xl font-semibold text-white">Total Amount:</span>
-                  <span className="text-2xl font-bold text-brand-red">
-                    ₹{booking.pricing.totalAmount}
-                  </span>
-                </div>
+                <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Price Summary</h4>
+                {(() => {
+                  const seatTotal = booking.pricing.seatTotal ?? booking.seats.reduce((s, seat) => s + seat.price, 0);
+                  const cgst = booking.pricing.taxes?.cgst ?? seatTotal * 0.09;
+                  const sgst = booking.pricing.taxes?.sgst ?? seatTotal * 0.09;
+                  const serviceFee = booking.pricing.taxes?.serviceFee ?? seatTotal * 0.02;
+                  const convenienceFee = booking.pricing.taxes?.convenienceFee ?? 20;
+                  return (
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between text-gray-300">
+                        <span>Seat price ({booking.seats.length} seat{booking.seats.length !== 1 ? 's' : ''})</span>
+                        <span>₹{seatTotal.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-400">
+                        <span>CGST (9%)</span>
+                        <span>₹{cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-400">
+                        <span>SGST (9%)</span>
+                        <span>₹{sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-400">
+                        <span>Service fee (2%)</span>
+                        <span>₹{serviceFee.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-400">
+                        <span>Convenience fee</span>
+                        <span>₹{convenienceFee.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between items-center font-bold text-base border-t border-gray-600 pt-2 mt-2">
+                        <span className="text-white">Total Amount</span>
+                        <span className="text-2xl text-brand-red">₹{booking.pricing.totalAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
