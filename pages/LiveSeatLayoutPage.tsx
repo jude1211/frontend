@@ -338,10 +338,10 @@ const LiveSeatLayoutPage: React.FC = () => {
           // Try to find consecutive seats starting from the clicked seat
           console.log('Consecutive seat selection attempt (first seat):', {
             desiredTicketCount,
-            clickedSeat: { row: meta.rowLabel, number: meta.number }
+            clickedSeat: { row: meta.rowLabel, number: meta.columnNumber }
           });
           
-          const consecutiveSeats = getConsecutiveSeats(meta.rowLabel, meta.number, desiredTicketCount, []);
+          const consecutiveSeats = getConsecutiveSeats(meta.rowLabel, meta.columnNumber, desiredTicketCount, []);
           console.log('Consecutive seats found:', consecutiveSeats);
           
           if (consecutiveSeats.length === desiredTicketCount) {
@@ -364,7 +364,7 @@ const LiveSeatLayoutPage: React.FC = () => {
         const newSeat = {
           id: seatKey, // Use seatKey as ID for consistency
           rowLabel: meta.rowLabel,
-          number: meta.number,
+          number: meta.columnNumber,
           price: meta.seatClass?.price || 180,
           tier: meta.seatClass?.tier || 'Base',
           className: meta.seatClass?.className || 'Base'

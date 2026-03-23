@@ -133,6 +133,32 @@ class ApiService {
     return this.tryFetch<any>(`/shows/${encodeURIComponent(showId)}/seat-layout`, { method: 'GET' }, false);
   }
 
+
+  // Get ML-based dynamic pricing decision for a show
+  // Returns discount info based on XGBoost demand prediction
+  async getDynamicPricing(params: {
+    basePrice: number;
+    showtime: string;       // ISO 8601
+    show_hour: number;      // 0-23
+    day_of_week: number;    // 0=Mon … 6=Sun
+    seat_occupancy_pct: number; // 0.0 – 1.0
+    movie_popularity: number;   // 0.0 – 1.0
+    recent_bookings: number;
+  }): Promise<ApiResponse<{
+    basePrice: number;
+    finalPrice: number;
+    demandScore: number | null;
+    demandLevel: string;
+    discountApplied: boolean;
+    discountPercent: number;
+    mlServiceStatus: string;
+  }>> {
+    return this.makeRequest('/pricing/ticket-price', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }, false);
+  }
+
   // Fetch booking details by booking ID
 
   private async tryFetch<T>(endpoint: string, options: RequestInit, isFormData: boolean, useCache: boolean = true, retryCount: number = 0): Promise<ApiResponse<T>> {

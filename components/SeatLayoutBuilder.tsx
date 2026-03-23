@@ -727,7 +727,12 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                                           });
                                           if (!isReserved) {
                                             // Use seatKey as the seatId to ensure consistent ID format
-                                            onSeatClick?.(seatKey, cell);
+                                            // Pass complete meta object: { rowLabel, columnNumber, seatClass }
+                                            onSeatClick?.(seatKey, { 
+                                              rowLabel: cell.rowLabel, 
+                                              columnNumber: cell.number, 
+                                              seatClass: tier.rule 
+                                            });
                                           }
                                         }}
                                           style={{ 

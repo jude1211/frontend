@@ -42,6 +42,12 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [discountInfo, setDiscountInfo] = useState<{
+    discountApplied: boolean;
+    discountPercent: number;
+    demandLevel: string;
+    mlServiceStatus: string;
+  } | null>(null);
 
   // Fetch seat layout and reserved seats
   useEffect(() => {
@@ -83,6 +89,51 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
             }
           });
           setReservedSeats(reserved);
+
+          // Fetch ML pricing: determine if a discount is active for this show
+          try {
+            // Parse showtime string (e.g. "9:30 PM") + bookingDate → ISO datetime
+            const timeMatch = showtime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            let showHour = 0;
+            let showMinute = 0;
+            if (timeMatch) {
+              showHour = parseInt(timeMatch[1], 10);
+              showMinute = parseInt(timeMatch[2], 10);
+              const ampm = timeMatch[3].toUpperCase();
+              if (ampm === 'PM' && showHour < 12) showHour += 12;
+              if (ampm === 'AM' && showHour === 12) showHour = 0;
+            }
+            const showDateObj = new Date(bookingDate);
+            showDateObj.setHours(showHour, showMinute, 0, 0);
+            const showtimeISO = showDateObj.toISOString();
+            const dayOfWeek = showDateObj.getDay();
+
+            const totalSeats = (liveRes.data.seats || []).length || 1;
+            const bookedCount = reserved.size;
+            const occupancyPct = Math.min(bookedCount / totalSeats, 1);
+
+            const pricingRes = await apiService.getDynamicPricing({
+              basePrice: 100, // reference price for discount check
+              showtime: showtimeISO,
+              show_hour: showHour,
+              day_of_week: dayOfWeek,
+              seat_occupancy_pct: occupancyPct,
+              movie_popularity: 0.5,
+              recent_bookings: bookedCount,
+            });
+
+            if (pricingRes.success && pricingRes.data) {
+              setDiscountInfo({
+                discountApplied: pricingRes.data.discountApplied,
+                discountPercent: pricingRes.data.discountPercent,
+                demandLevel: pricingRes.data.demandLevel,
+                mlServiceStatus: pricingRes.data.mlServiceStatus,
+              });
+            }
+          } catch (pricingErr) {
+            console.warn('[ML Pricing] Could not fetch pricing info:', pricingErr);
+            // Non-fatal — pricing badge is optional
+          }
         }
       } catch (err) {
         console.error('Error fetching seat data:', err);
@@ -240,6 +291,24 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
           </button>
         </div>
 
+        {/* ML Dynamic Pricing Discount Banner */}
+        {discountInfo?.discountApplied && (
+          <div className="mb-4 px-4 py-3 rounded-xl border border-yellow-500/60 bg-yellow-500/10 flex items-center gap-3 animate-pulse">
+            <span className="text-2xl">🏷️</span>
+            <div className="flex-1">
+              <p className="text-yellow-300 font-bold text-sm">
+                Limited Time: {discountInfo.discountPercent}% Low-Demand Discount!
+              </p>
+              <p className="text-yellow-400/80 text-xs">
+                Prices are already reduced — book now before this show fills up.
+              </p>
+            </div>
+            <span className="text-yellow-400 text-xs font-semibold bg-yellow-500/20 px-2 py-1 rounded-lg">
+              DEMAND: {discountInfo.demandLevel}
+            </span>
+          </div>
+        )}
+
         {/* Seat Layout */}
         <div className="mb-6">
           {isLoading ? (
@@ -279,10 +348,27 @@ const SeatSelectionModal: React.FC<SeatSelectionModalProps> = ({
             {/* Price Summary breakdown */}
             <div className="border-t border-gray-700 pt-3">
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Price Summary</h3>
+              {discountInfo?.discountApplied && (
+                <div className="flex items-center gap-2 mb-2 text-xs">
+                  <span className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 rounded px-2 py-0.5 font-semibold">
+                    🏷️ {discountInfo.discountPercent}% OFF applied
+                  </span>
+                  <span className="text-gray-500">Prices shown are already discounted</span>
+                </div>
+              )}
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between text-gray-300">
                   <span>Seat price ({selectedSeats.length} seat{selectedSeats.length !== 1 ? 's' : ''})</span>
-                  <span>₹{seatSubtotal.toLocaleString('en-IN')}</span>
+                  {discountInfo?.discountApplied ? (
+                    <span className="flex items-center gap-2">
+                      <span className="line-through text-gray-500">
+                        ₹{Math.round(seatSubtotal / (1 - discountInfo.discountPercent / 100)).toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-yellow-300 font-semibold">₹{seatSubtotal.toLocaleString('en-IN')}</span>
+                    </span>
+                  ) : (
+                    <span>₹{seatSubtotal.toLocaleString('en-IN')}</span>
+                  )}
                 </div>
                 <div className="flex justify-between text-gray-400">
                   <span>CGST (9%)</span>

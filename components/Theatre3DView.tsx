@@ -915,11 +915,6 @@ export default function Theatre3DView({
           />
         </Canvas>
       </div>
-
-      <div className="mt-2 text-[11px] text-gray-400">
-        If you see cubes, the model is missing. Add:
-        <span className="text-gray-300 font-mono"> frontend/public/models/cinema-seat.glb</span>
-      </div>
     </div>
   );
 }
