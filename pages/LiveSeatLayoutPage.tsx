@@ -5,6 +5,10 @@ import { socketService } from '../services/socketService';
 import SeatLayoutBuilder, { SeatLayoutConfig } from '../components/SeatLayoutBuilder';
 import BookNViewLoader from '../components/BookNViewLoader';
 import Theatre3DView from '../components/Theatre3DView';
+import SnackPromptStep from '../booking/SnackPromptStep';
+import SnackSelectionStep from '../booking/SnackSelectionStep';
+import SnackDeliveryStep from '../booking/SnackDeliveryStep';
+import SnackOrderSummary from '../booking/SnackOrderSummary';
 
 interface Movie {
   _id: string;
@@ -46,6 +50,7 @@ const LiveSeatLayoutPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingLayout, setIsLoadingLayout] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [discountInfo, setDiscountInfo] = useState<any>(null);
   const [selectedSeats, setSelectedSeats] = useState<any[]>([]);
   const [reservedSeats, setReservedSeats] = useState<Set<string>>(new Set());
   const [isBooking, setIsBooking] = useState(false);
@@ -61,6 +66,15 @@ const LiveSeatLayoutPage: React.FC = () => {
     mobileNumber: '',
     countryCode: '+91'
   });
+
+  // Snack Flow States
+  const [showSnackPrompt, setShowSnackPrompt] = useState(false);
+  const [showSnackSelection, setShowSnackSelection] = useState(false);
+  const [showSnackDelivery, setShowSnackDelivery] = useState(false);
+  const [showSnackSummary, setShowSnackSummary] = useState(false);
+  const [snackCart, setSnackCart] = useState<any[]>([]);
+  const [deliveryTime, setDeliveryTime] = useState('');
+  const [isCheckingSnacks, setIsCheckingSnacks] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
   const [show3D, setShow3D] = useState(false);
   const [focusedSeatKey, setFocusedSeatKey] = useState<string | null>(null);
@@ -180,6 +194,10 @@ const LiveSeatLayoutPage: React.FC = () => {
             });
           }
           
+          if (liveRes.data.dynamicPricing) {
+            setDiscountInfo(liveRes.data.dynamicPricing);
+          }
+          
           setReservedSeats(reserved);
           console.log('Reserved seats loaded:', Array.from(reserved));
           console.log('Full API response:', liveRes.data);
@@ -261,15 +279,24 @@ const LiveSeatLayoutPage: React.FC = () => {
       numRows: seatLayout.meta?.rows || 8,
       numCols: seatLayout.meta?.columns || 12,
       aisleColumns: seatLayout.meta?.aisles || [5, 9],
-      seatClassRules: (seatLayout.seatClasses || []).map((seatClass: any) => ({
-        rows: seatClass.rows || 'A-C',
-        className: seatClass.className || 'Gold',
-        price: seatClass.price || 250,
-        tier: seatClass.tier || 'Premium',
-        color: seatClass.color || '#f59e0b'
-      }))
+      seatClassRules: (seatLayout.seatClasses || []).map((seatClass: any) => {
+        const basePrice = seatClass.price || 250;
+        const isDiscounted = discountInfo?.discountApplied;
+        const discountPercent = discountInfo?.discountPercent || 0;
+        return {
+          rows: seatClass.rows || 'A-C',
+          className: seatClass.className || 'Gold',
+          price: isDiscounted ? Math.round(basePrice * (1 - (discountPercent / 100))) : basePrice,
+          displayPrice: isDiscounted ? Math.round(basePrice * (1 - (discountPercent / 100))) : basePrice,
+          originalPrice: isDiscounted ? basePrice : undefined,
+          discountApplied: isDiscounted,
+          discountPercent,
+          tier: seatClass.tier || 'Premium',
+          color: seatClass.color || '#f59e0b'
+        };
+      })
     };
-  }, [seatLayout]);
+  }, [seatLayout, discountInfo]);
 
   // Get available seats count (excluding reserved seats)
   const availableSeats = useMemo(() => {
@@ -623,6 +650,8 @@ const LiveSeatLayoutPage: React.FC = () => {
         className: seat.className
       }));
 
+      const snackTotal = snackCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
       const bookingPayload = {
         seats: seatsPayload,
         contactDetails: {
@@ -630,6 +659,9 @@ const LiveSeatLayoutPage: React.FC = () => {
           mobileNumber: contactDetails.mobileNumber,
           countryCode: contactDetails.countryCode
         },
+        snackOrder: snackCart,
+        deliveryTime: deliveryTime,
+        snackTotal: snackTotal,
         movieId: movieId,
         screenId: screenId,
         bookingDate: bookingDate,
@@ -654,6 +686,7 @@ const LiveSeatLayoutPage: React.FC = () => {
           setSelectedSeats([]);
           setShowTermsModal(false);
           setShowContactModal(false);
+          setShowSnackSummary(false);
           
           // Update reserved seats immediately for this user
           const newReservedSeats = new Set(reservedSeats);
@@ -769,7 +802,23 @@ const LiveSeatLayoutPage: React.FC = () => {
     }
 
     setShowContactModal(false);
-    handleConfirmBooking();
+
+    setIsCheckingSnacks(true);
+    apiService.makeRequest<any[]>(`/snacks?theatreId=${screen?.showGroups?.[0]?.theatreId || ''}`)
+      .then(res => {
+        if (res.success && res.data && res.data.length > 0) {
+          setShowSnackPrompt(true);
+        } else {
+          setShowSnackSummary(true);
+        }
+      })
+      .catch(e => {
+        console.error('Error checking snacks', e);
+        setShowSnackSummary(true);
+      })
+      .finally(() => {
+        setIsCheckingSnacks(false);
+      });
   };
 
   const handleContactInputChange = (field: string, value: string) => {
@@ -1031,16 +1080,22 @@ const LiveSeatLayoutPage: React.FC = () => {
             {/* Submit Button */}
             <button
               onClick={handleContactSubmit}
-              disabled={!contactDetails.email || !contactDetails.mobileNumber}
-              className="w-full bg-gray-400 text-white py-3 rounded-lg font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-gray-500 transition-colors"
+              disabled={!contactDetails.email || !contactDetails.mobileNumber || isCheckingSnacks}
+              className="w-full bg-gray-400 text-white py-3 rounded-lg font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-gray-500 transition-colors flex justify-center items-center"
             >
-              Submit
+              {isCheckingSnacks ? (
+                <><div className="w-5 h-5 border-2 border-white/30 border-t-white animate-spin rounded-full mr-2"></div> Loading...</>
+              ) : (
+                'Submit'
+              )}
             </button>
           </div>
         </div>
       )}
 
       <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8 max-w-screen-lg">
+
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6 sm:mb-8">
           <button
@@ -1215,6 +1270,68 @@ const LiveSeatLayoutPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Snack Flow Modals */}
+      {showSnackPrompt && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="w-full max-w-2xl text-left mt-10 mb-10">
+            <SnackPromptStep 
+              onSkip={() => { setShowSnackPrompt(false); setShowSnackSummary(true); }}
+              onContinue={() => { setShowSnackPrompt(false); setShowSnackSelection(true); }}
+            />
+          </div>
+        </div>
+      )}
+
+      {showSnackSelection && (
+        <div className="fixed inset-0 bg-black flex items-start justify-center p-0 z-50 overflow-y-auto h-screen w-screen">
+          <div className="w-full max-w-4xl p-4 sm:p-8 pt-12">
+            <SnackSelectionStep
+              theatreId={screen?.showGroups?.[0]?.theatreId || ''}
+              initialCart={snackCart}
+              onBack={() => { setShowSnackSelection(false); setShowSnackPrompt(true); }}
+              onContinue={(cart) => { 
+                setSnackCart(cart); 
+                setShowSnackSelection(false); 
+                if (cart.length > 0) setShowSnackDelivery(true); 
+                else setShowSnackSummary(true); 
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {showSnackDelivery && (
+        <div className="fixed inset-0 bg-black flex items-start justify-center p-0 z-50 overflow-y-auto h-screen w-screen">
+          <div className="w-full max-w-4xl p-4 sm:p-8 pt-12">
+            <SnackDeliveryStep
+              movieDuration={movie?.duration}
+              initialDeliveryTime={deliveryTime}
+              onBack={() => { setShowSnackDelivery(false); setShowSnackSelection(true); }}
+              onContinue={(time) => { setDeliveryTime(time); setShowSnackDelivery(false); setShowSnackSummary(true); }}
+            />
+          </div>
+        </div>
+      )}
+
+      {showSnackSummary && (
+        <div className="fixed inset-0 bg-black flex items-start justify-center p-0 z-50 overflow-y-auto h-screen w-screen">
+          <div className="w-full max-w-4xl p-4 sm:p-8 pt-12">
+            <SnackOrderSummary
+              selectedSeats={selectedSeats}
+              snackCart={snackCart}
+              deliveryTime={deliveryTime}
+              isProcessing={isBooking}
+              onBack={() => { 
+                setShowSnackSummary(false); 
+                if (snackCart.length > 0) setShowSnackDelivery(true);
+                else setShowSnackPrompt(true);
+              }}
+              onProceed={handleConfirmBooking}
+            />
+          </div>
+        </div>
+      )}
 
     </div>
   );

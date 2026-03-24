@@ -1,122 +1,84 @@
 import React, { useState, useEffect } from 'react';
 import BookNViewLoader from '../components/BookNViewLoader';
-
-interface Snack {
-  id: string;
-  name: string;
-  category: 'popcorn' | 'beverages' | 'candy' | 'nachos' | 'combo';
-  price: number;
-  originalPrice: number;
-  stock: number;
-  status: 'available' | 'out_of_stock' | 'discontinued';
-  imageUrl: string;
-  description: string;
-  isCombo: boolean;
-  comboItems?: string[];
-  discount: number;
-}
+import { snackService, Snack } from '../services/snackService';
 
 const SnacksManagement: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [snacks, setSnacks] = useState<Snack[]>([]);
+  const [stats, setStats] = useState({
+    totalItems: 0,
+    available: 0,
+    outOfStock: 0,
+    lowStock: 0,
+    totalValue: 0
+  });
+  
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSnack, setEditingSnack] = useState<Snack | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Form State
+  const [formData, setFormData] = useState({
+    name: '',
+    price: '',
+    originalPrice: '',
+    discount: '',
+    category: 'popcorn',
+    stock: '',
+    imageUrl: ''
+  });
 
   useEffect(() => {
-    // Simulate loading snacks
-    setSnacks([
-      {
-        id: '1',
-        name: 'Butter Popcorn (Large)',
-        category: 'popcorn',
-        price: 180,
-        originalPrice: 200,
-        stock: 45,
-        status: 'available',
-        imageUrl: 'https://picsum.photos/seed/popcorn/400/300',
-        description: 'Fresh buttered popcorn, perfect for movie watching',
-        isCombo: false,
-        discount: 10
-      },
-      {
-        id: '2',
-        name: 'Coca Cola (500ml)',
-        category: 'beverages',
-        price: 80,
-        originalPrice: 80,
-        stock: 120,
-        status: 'available',
-        imageUrl: 'https://picsum.photos/seed/cola/400/300',
-        description: 'Refreshing Coca Cola to quench your thirst',
-        isCombo: false,
-        discount: 0
-      },
-      {
-        id: '3',
-        name: 'Movie Combo Pack',
-        category: 'combo',
-        price: 350,
-        originalPrice: 450,
-        stock: 25,
-        status: 'available',
-        imageUrl: 'https://picsum.photos/seed/combo/400/300',
-        description: 'Popcorn + Coke + Nachos - Perfect movie companion',
-        isCombo: true,
-        comboItems: ['Butter Popcorn (Medium)', 'Coca Cola (500ml)', 'Nachos with Cheese'],
-        discount: 22
-      },
-      {
-        id: '4',
-        name: 'Nachos with Cheese',
-        category: 'nachos',
-        price: 150,
-        originalPrice: 150,
-        stock: 0,
-        status: 'out_of_stock',
-        imageUrl: 'https://picsum.photos/seed/nachos/400/300',
-        description: 'Crispy nachos topped with melted cheese',
-        isCombo: false,
-        discount: 0
-      },
-      {
-        id: '5',
-        name: 'M&M Chocolate',
-        category: 'candy',
-        price: 60,
-        originalPrice: 75,
-        stock: 80,
-        status: 'available',
-        imageUrl: 'https://picsum.photos/seed/mms/400/300',
-        description: 'Colorful M&M chocolates for sweet cravings',
-        isCombo: false,
-        discount: 20
-      },
-      {
-        id: '6',
-        name: 'Premium Combo',
-        category: 'combo',
-        price: 500,
-        originalPrice: 650,
-        stock: 15,
-        status: 'available',
-        imageUrl: 'https://picsum.photos/seed/premium/400/300',
-        description: 'Large Popcorn + Coke + Candy + Nachos',
-        isCombo: true,
-        comboItems: ['Butter Popcorn (Large)', 'Coca Cola (500ml)', 'M&M Chocolate', 'Nachos with Cheese'],
-        discount: 23
-      }
-    ]);
-  }, []);
+    const price = Number(formData.price);
+    const original = Number(formData.originalPrice);
+
+    if (original > 0 && price > 0 && original > price) {
+      const computed = Math.round(((original - price) / original) * 100);
+      setFormData(prev => ({ ...prev, discount: Math.min(100, Math.max(0, computed)).toString() }));
+    } else {
+      setFormData(prev => ({ ...prev, discount: '0' }));
+    }
+  }, [formData.price, formData.originalPrice]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      const [fetchedSnacks, fetchedStats] = await Promise.all([
+        snackService.getSnacks(selectedCategory, debouncedSearch),
+        snackService.getStats()
+      ]);
+      setSnacks(fetchedSnacks);
+      setStats(fetchedStats);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to load snacks data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [selectedCategory, debouncedSearch]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'available':
         return 'bg-green-100 text-green-800';
+      case 'low_stock':
+        return 'bg-yellow-100 text-yellow-800';
       case 'out_of_stock':
         return 'bg-red-100 text-red-800';
-      case 'discontinued':
-        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -148,23 +110,87 @@ const SnacksManagement: React.FC = () => {
 
   const getStockColor = (stock: number) => {
     if (stock === 0) return 'text-red-400';
-    if (stock < 10) return 'text-yellow-400';
+    if (stock <= 10) return 'text-yellow-400';
     return 'text-green-400';
   };
 
-  const filteredSnacks = selectedCategory === 'all' 
-    ? snacks 
-    : snacks.filter(snack => snack.category === selectedCategory);
-
-  const stats = {
-    totalItems: snacks.length,
-    availableItems: snacks.filter(s => s.status === 'available').length,
-    outOfStock: snacks.filter(s => s.status === 'out_of_stock').length,
-    totalValue: snacks.reduce((sum, snack) => sum + (snack.price * snack.stock), 0),
-    lowStock: snacks.filter(s => s.stock > 0 && s.stock < 10).length
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
   };
 
-  if (isLoading) {
+  const openAddModal = () => {
+    setFormData({
+      name: '',
+      price: '',
+      originalPrice: '',
+      discount: '0',
+      category: 'popcorn',
+      stock: '0',
+      imageUrl: ''
+    });
+    setEditingSnack(null);
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (snack: Snack) => {
+    setFormData({
+      name: snack.name,
+      price: snack.price.toString(),
+      originalPrice: snack.originalPrice?.toString() || snack.price.toString(),
+      discount: snack.discountPercent?.toString() || '0',
+      category: snack.category,
+      stock: snack.stock.toString(),
+      imageUrl: snack.image || (snack as any).imageUrl || ''
+    });
+    setEditingSnack(snack);
+    setShowAddModal(true);
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const payload: Partial<Snack> = {
+        name: formData.name,
+        price: Number(formData.price),
+        originalPrice: Number(formData.originalPrice),
+        discountPercent: Number(formData.discount),
+        category: formData.category as any,
+        stock: Number(formData.stock),
+        image: formData.imageUrl
+      };
+
+      if (editingSnack) {
+        await snackService.updateSnack(editingSnack.id || editingSnack._id, payload);
+      } else {
+        await snackService.createSnack(payload);
+      }
+      setShowAddModal(false);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error saving snack');
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this snack?')) return;
+    setIsLoading(true);
+    try {
+      await snackService.deleteSnack(id);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete snack');
+      setIsLoading(false);
+    }
+  };
+
+  const isAutoCalculated = Number(formData.originalPrice) > 0 && Number(formData.price) > 0 && Number(formData.originalPrice) > Number(formData.price);
+
+  if (isLoading && snacks.length === 0) {
     return <BookNViewLoader fullScreen={true} text="Loading Snacks..." />;
   }
 
@@ -184,7 +210,7 @@ const SnacksManagement: React.FC = () => {
               </div>
             </div>
             <button 
-              onClick={() => setShowAddModal(true)}
+              onClick={openAddModal}
               className="bg-brand-red text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-all duration-300 flex items-center space-x-2"
             >
               <i className="fas fa-plus"></i>
@@ -195,6 +221,13 @@ const SnacksManagement: React.FC = () => {
       </div>
 
       <div className="container mx-auto px-6 py-8">
+        {errorMsg && (
+          <div className="mb-4 bg-red-500/10 border border-red-500/50 text-red-500 px-4 py-3 rounded-lg flex items-center">
+            <i className="fas fa-exclamation-circle mr-2"></i>
+            {errorMsg}
+          </div>
+        )}
+
         {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <div className="bg-brand-gray rounded-2xl p-6 border border-brand-dark/40 shadow-lg">
@@ -213,7 +246,7 @@ const SnacksManagement: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-brand-light-gray text-sm">Available</p>
-                <p className="text-2xl font-bold text-white">{stats.availableItems}</p>
+                <p className="text-2xl font-bold text-white">{stats.available}</p>
               </div>
               <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
                 <i className="fas fa-check text-white"></i>
@@ -265,6 +298,8 @@ const SnacksManagement: React.FC = () => {
               <input
                 type="text"
                 placeholder="Search snacks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full px-4 py-3 bg-brand-dark border border-brand-dark/30 rounded-xl text-white placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
               />
             </div>
@@ -276,27 +311,30 @@ const SnacksManagement: React.FC = () => {
               <option value="all">All Categories</option>
               <option value="popcorn">Popcorn</option>
               <option value="beverages">Beverages</option>
-              <option value="candy">Candy</option>
               <option value="nachos">Nachos</option>
               <option value="combo">Combo Packs</option>
+              <option value="other">Other</option>
             </select>
-            <button className="bg-brand-red text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-colors">
-              <i className="fas fa-filter mr-2"></i>
-              Filter
+            <button 
+              onClick={() => loadData()}
+              className="bg-brand-red text-white px-6 py-3 rounded-xl hover:bg-red-600 transition-colors flex items-center">
+              <i className={`fas fa-sync-alt mr-2 ${isLoading ? 'animate-spin' : ''}`}></i>
+              Refresh
             </button>
           </div>
         </div>
 
         {/* Snacks Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredSnacks.map((snack) => (
-            <div key={snack.id} className="bg-brand-gray rounded-2xl border border-brand-dark/40 shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+          {snacks.map((snack) => (
+            <div key={snack.id || snack._id} className="bg-brand-gray rounded-2xl border border-brand-dark/40 shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
               {/* Snack Image */}
               <div className="relative">
                 <img 
-                  src={snack.imageUrl} 
+                  src={(snack as any).imageUrl || snack.image || 'https://via.placeholder.com/400x300?text=No+Image'} 
                   alt={snack.name}
                   className="w-full h-48 object-cover"
+                  onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/400x300?text=Image+Not+Found' }}
                 />
                 <div className="absolute top-4 right-4 flex space-x-2">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(snack.status)}`}>
@@ -306,17 +344,17 @@ const SnacksManagement: React.FC = () => {
                     {snack.category}
                   </span>
                 </div>
-                {snack.isCombo && (
+                {snack.category === 'combo' && (
                   <div className="absolute top-4 left-4">
                     <span className="bg-purple-500 text-white px-2 py-1 rounded text-xs font-medium">
                       COMBO
                     </span>
                   </div>
                 )}
-                {snack.discount > 0 && (
-                  <div className="absolute bottom-4 left-4">
-                    <span className="bg-green-500 text-white px-2 py-1 rounded text-xs font-medium">
-                      {snack.discount}% OFF
+                {((snack as any).discount > 0 || snack.discountPercent > 0) && (
+                  <div className="absolute bottom-4 left-4 shadow-lg">
+                    <span className="bg-green-500 text-white px-3 py-1 rounded font-bold text-sm">
+                      {((snack as any).discount || snack.discountPercent)}% OFF
                     </span>
                   </div>
                 )}
@@ -325,7 +363,6 @@ const SnacksManagement: React.FC = () => {
               {/* Snack Info */}
               <div className="p-6">
                 <h3 className="text-lg font-bold text-white mb-2">{snack.name}</h3>
-                <p className="text-brand-light-gray text-sm mb-3 line-clamp-2">{snack.description}</p>
                 
                 <div className="space-y-3 mb-4">
                   <div className="flex items-center justify-between">
@@ -346,42 +383,212 @@ const SnacksManagement: React.FC = () => {
                       {snack.stock} units
                     </span>
                   </div>
-
-                  {snack.isCombo && snack.comboItems && (
-                    <div>
-                      <span className="text-brand-light-gray text-sm">Includes:</span>
-                      <div className="mt-1">
-                        {snack.comboItems.map((item, index) => (
-                          <span key={index} className="inline-block bg-brand-dark text-white px-2 py-1 rounded text-xs mr-1 mb-1">
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Actions */}
                 <div className="flex space-x-2">
                   <button 
-                    onClick={() => setEditingSnack(snack)}
-                    className="flex-1 bg-brand-red text-white py-2 rounded-lg hover:bg-red-600 transition-colors text-sm"
+                    onClick={() => openEditModal(snack)}
+                    className="flex-1 bg-brand-dark border border-brand-red text-white py-2 rounded-lg hover:bg-brand-red transition-colors text-sm"
                   >
-                    <i className="fas fa-edit mr-1"></i>
-                    Edit
+                    <i className="fas fa-edit mr-1"></i> Edit
                   </button>
-                  <button className="flex-1 bg-brand-dark text-white py-2 rounded-lg hover:bg-brand-dark/80 transition-colors text-sm">
-                    <i className="fas fa-eye mr-1"></i>
-                    View
+                  <button 
+                    onClick={() => handleDelete(snack.id || snack._id)} 
+                    className="flex-1 bg-brand-dark/50 text-red-500 py-2 rounded-lg hover:bg-red-500 hover:text-white transition-colors text-sm"
+                  >
+                    <i className="fas fa-trash mr-1"></i> Delete
                   </button>
                 </div>
               </div>
             </div>
           ))}
+          {snacks.length === 0 && !isLoading && (
+            <div className="col-span-full py-12 text-center">
+              <i className="fas fa-box-open text-4xl text-brand-light-gray mb-4"></i>
+              <p className="text-brand-light-gray">No snacks found matching your criteria</p>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Add / Edit Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-brand-gray border border-brand-dark/40 rounded-2xl w-full max-w-2xl text-left shadow-2xl mt-10 mb-10">
+            <div className="p-6 border-b border-brand-dark/40 flex justify-between items-center bg-brand-dark/30 rounded-t-2xl">
+              <h2 className="text-xl font-bold text-white flex items-center">
+                <i className={`fas ${editingSnack ? 'fa-edit' : 'fa-plus'} mr-3 text-brand-red`}></i>
+                {editingSnack ? 'Edit Snack' : 'Add New Snack'}
+              </h2>
+              <button 
+                onClick={() => setShowAddModal(false)}
+                className="text-brand-light-gray hover:text-white transition-colors p-2"
+              >
+                <i className="fas fa-times text-xl"></i>
+              </button>
+            </div>
+            
+            <form onSubmit={handleFormSubmit} className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-brand-light-gray mb-2">Name *</label>
+                  <input
+                    type="text"
+                    name="name"
+                    required
+                    value={formData.name}
+                    onChange={handleFormChange}
+                    className="w-full px-4 py-2 bg-brand-dark border border-brand-dark/30 rounded-xl text-white focus:ring-2 focus:ring-brand-red outline-none"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-brand-light-gray mb-2">Category *</label>
+                  <select
+                    name="category"
+                    required
+                    value={formData.category}
+                    onChange={handleFormChange}
+                    className="w-full px-4 py-2 bg-brand-dark border border-brand-dark/30 rounded-xl text-white focus:ring-2 focus:ring-brand-red outline-none"
+                  >
+                    <option value="popcorn">Popcorn</option>
+                    <option value="beverages">Beverages</option>
+                    <option value="nachos">Nachos</option>
+                    <option value="combo">Combo Pack</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-brand-light-gray mb-2">Price (₹) *</label>
+                  <input
+                    type="number"
+                    name="price"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.price}
+                    onChange={handleFormChange}
+                    className="w-full px-4 py-2 bg-brand-dark border border-brand-dark/30 rounded-xl text-white focus:ring-2 focus:ring-brand-red outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-brand-light-gray mb-2">Original Price (₹)</label>
+                  <input
+                    type="number"
+                    name="originalPrice"
+                    min="0"
+                    step="0.01"
+                    value={formData.originalPrice}
+                    onChange={handleFormChange}
+                    className="w-full px-4 py-2 bg-brand-dark border border-brand-dark/30 rounded-xl text-white focus:ring-2 focus:ring-brand-red outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="flex items-center text-sm font-medium text-brand-light-gray mb-2">
+                    Discount %
+                    {isAutoCalculated && (
+                      <span
+                        className="ml-2 font-medium"
+                        style={{
+                          background: '#1a3a1a',
+                          color: '#66bb6a',
+                          fontSize: '0.7rem',
+                          padding: '2px 7px',
+                          borderRadius: '10px'
+                        }}
+                      >
+                        auto-calculated
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="number"
+                    name="discount"
+                    min="0"
+                    max="100"
+                    value={formData.discount}
+                    onChange={handleFormChange}
+                    readOnly={isAutoCalculated}
+                    className={`w-full px-4 py-2 bg-[#111] rounded-xl text-[#e5e5e5] outline-none transition-colors ${
+                      isAutoCalculated
+                        ? 'border border-[#2e7d32] cursor-default'
+                        : 'border border-[#333] focus:border-[#e91e8c]'
+                    }`}
+                  />
+                  {isAutoCalculated && (
+                    <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '3px' }}>
+                      Calculated from Price vs Original Price
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-brand-light-gray mb-2">Stock Quantity *</label>
+                  <input
+                    type="number"
+                    name="stock"
+                    required
+                    min="0"
+                    value={formData.stock}
+                    onChange={handleFormChange}
+                    className="w-full px-4 py-2 bg-brand-dark border border-brand-dark/30 rounded-xl text-white focus:ring-2 focus:ring-brand-red outline-none"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-brand-light-gray mb-2">Image URL</label>
+                  <input
+                    type="url"
+                    name="imageUrl"
+                    placeholder="https://example.com/image.jpg"
+                    value={formData.imageUrl}
+                    onChange={handleFormChange}
+                    className="w-full px-4 py-2 bg-brand-dark border border-brand-dark/30 rounded-xl text-white focus:ring-2 focus:ring-brand-red outline-none"
+                  />
+                  {formData.imageUrl && (
+                    <div className="mt-4 flex justify-center bg-black/40 p-4 rounded-xl border border-brand-dark/50">
+                      <img 
+                        src={formData.imageUrl} 
+                        alt="Preview" 
+                        className="h-32 object-contain rounded-lg shadow-lg"
+                        onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/400x300?text=Invalid+Image+URL' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-end space-x-4 border-t border-brand-dark/40 pt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-6 py-2.5 rounded-xl border border-brand-light-gray/30 text-white hover:bg-brand-dark transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-8 py-2.5 rounded-xl bg-brand-red text-white hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center"
+                >
+                  {isLoading ? (
+                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                  ) : (
+                    <i className="fas fa-save mr-2"></i>
+                  )}
+                  {editingSnack ? 'Update Snack' : 'Save Snack'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default SnacksManagement; 
+export default SnacksManagement;

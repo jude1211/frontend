@@ -107,7 +107,7 @@ class ApiService {
   }
   // Live seat layout for a show (with availability)
   async getLiveSeatLayout(screenId: string, bookingDate: string, showtime: string): Promise<ApiResponse<any>> {
-    const endpoint = `/seat-layout/${encodeURIComponent(screenId)}/${encodeURIComponent(bookingDate)}/${encodeURIComponent(showtime)}`;
+    const endpoint = `/seat-layout/${encodeURIComponent(screenId)}/${encodeURIComponent(bookingDate)}/${encodeURIComponent(showtime)}/live`;
 
     // Throttle seat layout requests to prevent excessive calls
     return requestThrottle.throttle(

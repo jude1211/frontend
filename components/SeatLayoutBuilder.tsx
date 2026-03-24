@@ -7,6 +7,10 @@ export interface SeatClassRule {
   rows: string; // e.g., "A-C" or "D" or "G-J"
   className: string; // e.g., Gold, Silver, Balcony
   price: number;
+  displayPrice?: number;
+  originalPrice?: number;
+  discountApplied?: boolean;
+  discountPercent?: number;
   tier: PricingTier;
   color: string; // hex or tailwind color for legend; SeatPicker colors are limited, so we show legend
   layout?: { numRows: number; numCols: number; aisleColumns: number[] };
@@ -614,7 +618,15 @@ const SeatLayoutBuilder: React.FC<SeatLayoutBuilderProps> = ({
                 <div className="text-center mb-2">
                   <div className="inline-flex items-center space-x-3 px-4 py-2 rounded-lg bg-gray-800 border border-gray-600">
                     <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: tier.rule.color }}></span>
-                    <span className="text-sm font-semibold text-gray-200">{price}</span>
+                    {tier.rule.discountApplied ? (
+                      <span className="flex items-center gap-2">
+                        <span className="text-white font-bold text-base">₹{tier.rule.displayPrice}</span>
+                        <span className="text-gray-400 line-through text-xs">₹{tier.rule.originalPrice}</span>
+                        <span className="bg-green-700 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">{tier.rule.discountPercent}% OFF</span>
+                      </span>
+                    ) : (
+                      <span className="text-sm font-semibold text-gray-200">{price}</span>
+                    )}
                     <span className="text-sm uppercase tracking-wide text-gray-300">{header}</span>
                     <span className="text-xs text-gray-500">{tierName}</span>
                   </div>
