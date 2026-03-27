@@ -8,8 +8,8 @@ import { useNavigate } from 'react-router-dom';
 const BirthdayWishes: React.FC = () => {
     const navigate = useNavigate();
 
-    const handleBooking = (imageUrl: string) => {
-        navigate('/book-special-moment', { state: { selectedImage: imageUrl } });
+    const handleBooking = (occasion: 'birthday' | 'moment' | 'valentine') => {
+        navigate('/book-special-moment', { state: { occasion } });
     };
 
     return (
@@ -45,7 +45,7 @@ const BirthdayWishes: React.FC = () => {
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#1a1c2e] to-transparent opacity-60"></div>
                         <div className="absolute bottom-3 right-3">
-                            <button onClick={() => handleBooking('/assets/images/cinema-birthday.png')} className="bg-brand-red text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">
+                            <button onClick={() => handleBooking('birthday')} className="bg-brand-red text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">
                                 Book Now
                             </button>
                         </div>
@@ -72,8 +72,8 @@ const BirthdayWishes: React.FC = () => {
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#1a1c2e] to-transparent opacity-60"></div>
                         <div className="absolute bottom-3 right-3">
-                            <button onClick={() => handleBooking('/assets/images/couple-moment.png')} className="bg-brand-red text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">
-                                Upload Video
+                            <button onClick={() => handleBooking('moment')} className="bg-brand-red text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">
+                                Book Now
                             </button>
                         </div>
                     </div>
@@ -99,8 +99,8 @@ const BirthdayWishes: React.FC = () => {
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#1a1c2e] to-transparent opacity-60"></div>
                         <div className="absolute bottom-3 right-3">
-                            <button onClick={() => handleBooking('/assets/images/valentine-moment.png')} className="bg-brand-red text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">
-                                Surprise Them
+                            <button onClick={() => handleBooking('valentine')} className="bg-brand-red text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">
+                                Book Now
                             </button>
                         </div>
                     </div>
